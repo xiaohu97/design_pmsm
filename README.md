@@ -22,6 +22,9 @@ motor design/
   run.ps1
   run.bat
   README.md
+  output/
+    pmsm_waveforms.csv
+    pmsm_waveforms.png
 ```
 
 ## 1）环境准备
@@ -69,7 +72,18 @@ python .\design_pmsm.py --save-csv --save-png --out .\output
 - `--t-end 6.0`
 - `--no-show`
 
-## 3）FEMM 有限元模板
+仿真输出文件（默认在 `output/`）：
+
+- `pmsm_waveforms.csv`
+- `pmsm_waveforms.png`
+
+## 3）仿真波形示例（dq 模型）
+
+运行 `design_pmsm.py` 后会生成如下波形图：
+
+![dq 模型仿真波形](output/pmsm_waveforms.png)
+
+## 4）FEMM 有限元模板
 
 前置条件：
 
@@ -93,7 +107,7 @@ python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" -
 - `output_femm/femm_waveforms_*.png`
 - `output_femm/femm_summary.csv`
 
-## 说明
+## 5）说明
 
 - `design_pmsm.py` 适合做控制与参数趋势的快速评估。
 - `femm_spm_template.py` 更接近场路仿真，但当前仍是模板：
@@ -101,7 +115,7 @@ python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" -
   - 铁耗/磁钢损耗为半经验模型；
   - 若用于工程定型，请替换为真实几何、材料与 B-H 曲线数据。
 
-## FEMM 故障排查
+## 6）FEMM 故障排查
 
 如果 PowerShell 把列表参数拆开，可用以下任一写法：
 
