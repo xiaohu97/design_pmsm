@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 
 # Generated outputs
-output/
-output_smoke/
+# output/
+# output_smoke/
 output_femm/
 output_femm_smoke/
