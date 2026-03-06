@@ -1,4 +1,4 @@
-﻿"""FEMM 2‑D SPMSM template — auto model + comprehensive post‑processing.
+"""FEMM 2‑D SPMSM template — auto model + comprehensive post‑processing with multiprocessing.
 
 Outputs supported (selected via ``--analysis``):
   basic      – torque / loss / temperature waveforms (original)
@@ -17,11 +17,16 @@ import math
 import os
 import re
 import tempfile
+import uuid
+import multiprocessing
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 try:
     import femm
@@ -36,24 +41,27 @@ MU0 = 4e-7 * math.pi
 ROTOR_GROUP = 2
 STATOR_GROUP = 3
 COIL_GROUP = 4
-TMP_FEM = os.path.join(tempfile.gettempdir(), "femm_spm_tmp.fem")
+
+def get_tmp_fem():
+    """Returns a unique temporary filename for FEMM model to avoid clashes in multiprocessing."""
+    return os.path.join(tempfile.gettempdir(), f"femm_spm_tmp_{os.getpid()}_{uuid.uuid4().hex[:6]}.fem")
 
 # ── data classes ───────────────────────────────────────────────────
 
 @dataclass
 class Machine:
-    pole_pairs: int = 4
-    slots: int = 12
-    stack_length_mm: float = 80.0
-    r_shaft_mm: float = 10.0
-    r_rotor_mm: float = 34.0
-    mag_thickness_mm: float = 3.0
-    airgap_mm: float = 0.8
-    r_stator_outer_mm: float = 90.0
-    r_air_outer_mm: float = 140.0
-    magnet_arc_ratio: float = 0.75
-    turns_per_slot: int = 35
-    slot_depth_mm: float = 8.0
+    pole_pairs: int = 10 
+    slots: int = 18 
+    stack_length_mm: float = 80.0 
+    r_shaft_mm: float = 20.0 
+    r_rotor_mm: float = 30.0 
+    mag_thickness_mm: float = 1.5 
+    airgap_mm: float = 0.5 
+    r_stator_outer_mm: float = 60.0 
+    r_air_outer_mm: float = 70.0 
+    magnet_arc_ratio: float = 0.85 
+    turns_per_slot: int = 25 
+    slot_depth_mm: float = 8.0 
 
     @property
     def r_mag_outer_mm(self):
@@ -70,22 +78,22 @@ class Machine:
 
 @dataclass
 class LossThermal:
-    r_phase_20: float = 0.22
-    alpha_cu: float = 0.00393
-    kh: float = 1.1
-    ke: float = 0.004
-    core_mass_kg: float = 9.0
-    magnet_loss_ratio: float = 0.15
-    r_th: float = 0.45
-    c_th: float = 2600.0
-    t_amb: float = 25.0
+    r_phase_20: float = 0.22         
+    alpha_cu: float = 0.00393        
+    kh: float = 1.1                  
+    ke: float = 0.004                
+    core_mass_kg: float = 0.5        
+    magnet_loss_ratio: float = 0.15  
+    r_th: float = 0.45               
+    c_th: float = 2600.0             
+    t_amb: float = 25.0              
 
 
 @dataclass
 class Drive:
     """Inverter / voltage‑source parameters for T‑N envelope."""
-    v_dc: float = 310.0
-    i_max: float = 55.0
+    v_dc: float = 48.0             
+    i_max: float = 100.0             
 
 
 @dataclass
@@ -188,7 +196,7 @@ def ensure_materials():
 
 # ── model builder ─────────────────────────────────────────────────
 
-def build_model(machine: Machine):
+def build_model(machine: Machine, tmp_fem: str):
     femm.newdocument(0)
     femm.mi_probdef(0, "millimeters", "planar", 1e-8, machine.stack_length_mm, 30)
     ensure_materials()
@@ -232,12 +240,19 @@ def build_model(machine: Machine):
         set_block("Air", gx, gy, group=ROTOR_GROUP)
 
     # stator slots
-    phase_map = [
-        ("A", +1), ("C", -1), ("B", +1), ("A", -1), ("C", +1), ("B", -1),
-        ("A", +1), ("C", -1), ("B", +1), ("A", -1), ("C", +1), ("B", -1),
-    ]
-    if machine.slots != len(phase_map):
-        raise ValueError("This template currently expects 12 slots.")
+    if machine.slots == 18:
+        phase_map = [
+            ("A", +1), ("A", -1), ("C", -1), ("C", +1), ("C", -1), ("B", -1),
+            ("B", +1), ("B", -1), ("A", -1), ("A", +1), ("A", -1), ("C", -1),
+            ("C", +1), ("C", -1), ("B", -1), ("B", +1), ("B", -1), ("A", -1)
+        ]
+    elif machine.slots == 12:
+        phase_map = [
+            ("A", +1), ("C", -1), ("B", +1), ("A", -1), ("C", +1), ("B", -1),
+            ("A", +1), ("C", -1), ("B", +1), ("A", -1), ("C", +1), ("B", -1),
+        ]
+    else:
+        raise ValueError(f"This template currently expects 12 or 18 slots. Got {machine.slots}.")
     slot_pitch = 360.0 / machine.slots
     slot_span = slot_pitch * 0.55
     r_slot_in = machine.r_stator_inner_mm + 0.2
@@ -249,7 +264,7 @@ def build_model(machine: Machine):
         set_block("Copper", x, y, circuit=phase, group=COIL_GROUP,
                   turns=sign * machine.turns_per_slot)
 
-    femm.mi_saveas(TMP_FEM)
+    femm.mi_saveas(tmp_fem)
 
 
 # ── low‑level helpers ──────────────────────────────────────────────
@@ -298,15 +313,22 @@ def _get_circuit_flux(phase: str):
 # 1) BASIC: torque / loss / temperature waveforms (original)
 # ══════════════════════════════════════════════════════════════════
 
-def run_one_case(machine, loss, cfg, rpm, iq_peak):
-    build_model(machine)
+def run_one_case(machine, loss, cfg, rpm, iq_peak, progress=False):
+    tmp_fem = get_tmp_fem()
+    build_model(machine, tmp_fem)
+    
     f_e = machine.pole_pairs * rpm / 60.0
     dt = 1.0 / (f_e * cfg.points_per_electrical_cycle)
     dtheta_e = 2.0 * math.pi / cfg.points_per_electrical_cycle
     dtheta_m_deg = math.degrees(dtheta_e / machine.pole_pairs)
     temp = loss.t_amb
     rows = []
-    for k in range(cfg.points_per_electrical_cycle):
+    
+    iterator = range(cfg.points_per_electrical_cycle)
+    if progress:
+        iterator = tqdm(iterator, desc=f"FEA (rpm={rpm:n}, Iq={iq_peak:n})", leave=False)
+        
+    for k in iterator:
         theta_e = k * dtheta_e
         ia, ib, ic = set_phase_currents(iq_peak, theta_e)
         if k > 0:
@@ -376,13 +398,15 @@ def plot_field_maps(machine, out_dir, case_tag, show=False):
     B_mag = np.zeros_like(R)
     A_val = np.zeros_like(R)
 
-    for i in range(ntheta):
-        for j in range(nr):
-            x = R[i, j] * math.cos(TH[i, j])
-            y = R[i, j] * math.sin(TH[i, j])
-            bx, by = femm.mo_getb(x, y)
-            B_mag[i, j] = math.hypot(bx, by)
-            A_val[i, j] = femm.mo_geta(x, y)
+    with tqdm(total=ntheta, desc="Field Maps", leave=False) as pbar:
+        for i in range(ntheta):
+            for j in range(nr):
+                x = R[i, j] * math.cos(TH[i, j])
+                y = R[i, j] * math.sin(TH[i, j])
+                bx, by = femm.mo_getb(x, y)
+                B_mag[i, j] = math.hypot(bx, by)
+                A_val[i, j] = femm.mo_geta(x, y)
+            pbar.update(1)
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -414,7 +438,7 @@ def plot_airgap_flux_density(machine, out_dir, case_tag, show=False, num_points=
     r_gap = machine.r_mag_outer_mm + machine.airgap_mm / 2.0
     angles = np.linspace(0, 360, num_points, endpoint=False)
     bn_arr, bt_arr = [], []
-    for deg in angles:
+    for deg in tqdm(angles, desc="Airgap Flux", leave=False):
         x, y = polar_xy(r_gap, deg)
         bx, by = femm.mo_getb(x, y)
         rad = math.radians(deg)
@@ -446,11 +470,12 @@ def plot_airgap_flux_density(machine, out_dir, case_tag, show=False, num_points=
 
 def run_cogging_torque(machine, out_dir, num_steps=72, show=False):
     """Build model with I=0, rotate rotor one slot‑pitch, record torque."""
-    build_model(machine)
+    tmp_fem = get_tmp_fem()
+    build_model(machine, tmp_fem)
     slot_pitch_deg = 360.0 / machine.slots
     step_deg = slot_pitch_deg / num_steps
     angles, torques = [], []
-    for k in range(num_steps):
+    for k in tqdm(range(num_steps), desc="Cogging Torque"):
         if k > 0:
             femm.mi_selectgroup(ROTOR_GROUP)
             femm.mi_moverotate(0.0, 0.0, step_deg)
@@ -487,16 +512,17 @@ def run_cogging_torque(machine, out_dir, num_steps=72, show=False):
 def run_inductance_analysis(machine, out_dir, test_current=1.0, num_steps=37, show=False):
     """Compute Ld and Lq by applying d‑ or q‑axis current at each rotor position."""
     pp = machine.pole_pairs
-    e_cycle_mech = 360.0 / pp          # one electrical cycle in mech deg
+    e_cycle_mech = 360.0 / pp          
     step_deg = e_cycle_mech / num_steps
     dtheta_e = 2 * math.pi / num_steps
 
     Ld_arr, Lq_arr, pos_arr = [], [], []
 
     for axis_label, id_val, iq_val in [("d", test_current, 0.0), ("q", 0.0, test_current)]:
-        build_model(machine)
+        tmp_fem = get_tmp_fem()
+        build_model(machine, tmp_fem)
         vals = []
-        for k in range(num_steps):
+        for k in tqdm(range(num_steps), desc=f"Inductance ({axis_label}-axis)"):
             theta_e = k * dtheta_e
             set_dq_currents(machine, id_val, iq_val, theta_e)
             if k > 0:
@@ -506,12 +532,10 @@ def run_inductance_analysis(machine, out_dir, test_current=1.0, num_steps=37, sh
             femm.mi_analyze(1)
             femm.mi_loadsolution()
 
-            # get flux linkages of all three phases
             psi_a = _get_circuit_flux("A")
             psi_b = _get_circuit_flux("B")
             psi_c = _get_circuit_flux("C")
 
-            # Park transform → ψd, ψq
             cos_e = math.cos(theta_e)
             sin_e = math.sin(theta_e)
             cos_b = math.cos(theta_e - 2 * math.pi / 3)
@@ -522,14 +546,11 @@ def run_inductance_analysis(machine, out_dir, test_current=1.0, num_steps=37, sh
             psi_q = (2.0 / 3.0) * (-psi_a * sin_e - psi_b * sin_b - psi_c * sin_c)
 
             vals.append((k * step_deg, psi_d, psi_q))
-
             if axis_label == "d":
                 pos_arr.append(k * step_deg)
 
         vals = np.array(vals)
         if axis_label == "d":
-            # Ld = (ψd − ψ_pm_d) / Id.  At I=0 ψ_pm would be here; simplified: Ld ≈ ψd / Id
-            # since test_current is small, the PM contribution dominates; we use incremental method
             Ld_arr = vals[:, 1] / test_current if test_current != 0 else vals[:, 1] * 0
         else:
             Lq_arr = vals[:, 2] / test_current if test_current != 0 else vals[:, 2] * 0
@@ -556,21 +577,89 @@ def run_inductance_analysis(machine, out_dir, test_current=1.0, num_steps=37, sh
 
 
 # ══════════════════════════════════════════════════════════════════
-# 6) EFFICIENCY MAP: speed × current sweep
+# 6) EFFICIENCY MAP & PARALLEL WORKERS
 # ══════════════════════════════════════════════════════════════════
 
+def _worker_emap(args):
+    """Multiprocessing worker function for pure performance sweeping."""
+    machine, loss, rpm, iq, pts = args
+    import pythoncom
+    import time, random
+    pythoncom.CoInitialize()
+    time.sleep(random.uniform(0.2, 2.0)) # stagger COM startup to prevent hangs
+    try:
+        import femm
+        femm.openfemm(1)
+        cfg = SweepCfg(points_per_electrical_cycle=pts)
+        rows = run_one_case(machine, loss, cfg, rpm, iq, progress=False)
+        t_avg = float(np.mean(rows[:, 5]))
+        ploss_avg = float(np.mean(rows[:, 9]))
+        omega = rpm * 2 * math.pi / 60.0
+        p_mech = t_avg * omega
+        eta = p_mech / (p_mech + ploss_avg) if (p_mech + ploss_avg) > 0 else 0.0
+        eta = max(0.0, min(1.0, eta))
+        return (rpm, iq, t_avg, ploss_avg, eta)
+    except Exception as exc:
+        traceback.print_exc()
+        raise exc
+    finally:
+        try:
+            femm.closefemm()
+        except:
+            pass
+
+
+def _worker_basic(args):
+    """Multiprocessing worker function for basic waveform generation."""
+    machine, loss, rpm, iq, pts, out_dir, show, analyses = args
+    import pythoncom
+    import time, random
+    pythoncom.CoInitialize()
+    time.sleep(random.uniform(0.2, 2.0)) # stagger COM startup to prevent hangs
+    try:
+        import femm
+        femm.openfemm(1)
+        cfg = SweepCfg(points_per_electrical_cycle=pts)
+        case_tag = f"rpm{int(rpm)}_iq{int(iq)}"
+        rows = run_one_case(machine, loss, cfg, rpm, iq, progress=False)
+
+        if "basic" in analyses:
+            save_case_outputs(rows, out_dir, case_tag, show)
+        if "field" in analyses:
+            plot_field_maps(machine, out_dir, case_tag, show)
+        if "airgap" in analyses:
+            plot_airgap_flux_density(machine, out_dir, case_tag, show, num_points=180) # Using 180 points for speed
+
+        avg_torque = float(np.mean(rows[:, 5]))
+        avg_loss = float(np.mean(rows[:, 9]))
+        final_temp = float(rows[-1, 10])
+        return (rpm, iq, avg_torque, avg_loss, final_temp)
+    except Exception as exc:
+        traceback.print_exc()
+        raise exc
+    finally:
+        try:
+            femm.closefemm()
+        except:
+            pass
+
 def run_efficiency_map(machine, loss, rpm_list, iq_list, out_dir,
-                       points_per_cycle=12, show=False):
-    """Sweep rpm × iq, compute avg torque & losses, plot η contour."""
-    results = []   # (rpm, iq, T_avg, P_loss_avg, eta)
-    total = len(rpm_list) * len(iq_list)
-    idx = 0
-    for rpm in rpm_list:
-        for iq in iq_list:
-            idx += 1
-            print(f"  emap [{idx}/{total}] rpm={rpm:.0f} iq={iq:.1f} A …")
-            cfg = SweepCfg(points_per_electrical_cycle=points_per_cycle)
-            rows = run_one_case(machine, loss, cfg, rpm, iq)
+                       points_per_cycle=12, show=False, workers=1):
+    """Sweep rpm × iq, plot η contour."""
+    results = []   
+    tasks = [(machine, loss, rpm, iq, points_per_cycle) for rpm in rpm_list for iq in iq_list]
+
+    if workers > 1:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            future_to_req = {executor.submit(_worker_emap, t): t for t in tasks}
+            for future in tqdm(as_completed(future_to_req), total=len(tasks), desc="Emap Sweep"):
+                results.append(future.result())
+    else:
+        # Sequential
+        for t in tqdm(tasks, desc="Emap Sweep"):
+            rpm, iq = t[2], t[3]
+            cfg = SweepCfg(points_per_electrical_cycle=t[4])
+            rows = run_one_case(machine, loss, cfg, rpm, iq, progress=True)
             t_avg = float(np.mean(rows[:, 5]))
             ploss_avg = float(np.mean(rows[:, 9]))
             omega = rpm * 2 * math.pi / 60.0
@@ -584,11 +673,16 @@ def run_efficiency_map(machine, loss, rpm_list, iq_list, out_dir,
     np.savetxt(out_dir / "efficiency_map.csv", data, delimiter=",",
                header="rpm,iq_peak_a,avg_torque_nm,avg_loss_w,efficiency", comments="")
 
-    # reshape for contour
-    n_rpm, n_iq = len(rpm_list), len(iq_list)
+    # Match mesh shapes
+    rpm_uq = np.unique(data[:, 0])
+    iq_uq = np.unique(data[:, 1])
+    n_rpm, n_iq = len(rpm_uq), len(iq_uq)
+    
+    # Sort data for meshgrid
+    data = data[np.lexsort((data[:, 1], data[:, 0]))]
     RPM = data[:, 0].reshape(n_rpm, n_iq)
     TQ  = data[:, 2].reshape(n_rpm, n_iq)
-    ETA = data[:, 4].reshape(n_rpm, n_iq) * 100  # percent
+    ETA = data[:, 4].reshape(n_rpm, n_iq) * 100 
 
     fig, ax = plt.subplots(figsize=(10, 6))
     levels = np.arange(0, 101, 5)
@@ -617,30 +711,22 @@ def plot_torque_speed_curve(machine, drive, emap_data, out_dir, show=False):
         t_max_fem.append(np.max(emap_data[mask, 2]))
     t_max_fem = np.array(t_max_fem)
 
-    # Analytical voltage‑limited envelope (simplified SPMSM):
-    #   V_max ≈ V_dc / sqrt(3)
-    #   At each speed:  V_max = sqrt((Rs*I + ωe*ψ_pm)² + (ωe*Ld*I)²)
-    #   → solve for max I → max torque = 1.5 * p * ψ_pm * Iq
-    # We use a rough estimate with Ld, ψ_pm from the geometry
     mu_r, Br = 1.05, 1.22
     Hc = Br / (MU0 * mu_r)
-    # ψ_pm ≈ Br * (2/π) * τ_p * L_stk * N_ph * k_w / p    (rough)
     tau_p = math.pi * (machine.r_rotor_mm * 1e-3) / machine.pole_pairs
     Lstk = machine.stack_length_mm * 1e-3
-    Nph = machine.turns_per_slot * machine.slots / 3 / 2  # series turns per phase
-    kw = 0.866  # winding factor estimate
+    Nph = machine.turns_per_slot * machine.slots / 3 / 2  
+    kw = 0.866 
     psi_pm = Br * machine.magnet_arc_ratio * tau_p * Lstk * Nph * kw * 2 / math.pi
-    # rough Ld
     g_eff = (machine.airgap_mm + machine.mag_thickness_mm / mu_r) * 1e-3
     Ld = MU0 * (Nph**2) * math.pi * (machine.r_stator_inner_mm * 1e-3) * Lstk / (machine.pole_pairs * g_eff)
 
     V_max = drive.v_dc / math.sqrt(3)
-    Rs = 0.023  # approx from design_pmsm
+    Rs = 0.023  
     rpm_dense = np.linspace(100, rpm_vals.max() * 1.5, 200)
     t_envelope = []
     for rpm in rpm_dense:
         we = machine.pole_pairs * rpm * 2 * math.pi / 60.0
-        # max current from voltage constraint: simplified
         i_budget = min(drive.i_max, max(0, (V_max - we * psi_pm) / max(we * Ld + Rs, 1e-9)))
         torque = 1.5 * machine.pole_pairs * psi_pm * i_budget
         t_envelope.append(torque)
@@ -649,13 +735,11 @@ def plot_torque_speed_curve(machine, drive, emap_data, out_dir, show=False):
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
-    # torque‑speed
     ax1.plot(rpm_vals, t_max_fem, "bs-", label="FEA max torque", markersize=5)
     ax1.plot(rpm_dense, t_envelope, "r--", label="Voltage‑limit envelope (analytical)")
     ax1.set_ylabel("Torque [N·m]"); ax1.set_title("Torque–Speed Curve")
     ax1.legend(); ax1.grid(True)
 
-    # power‑speed
     p_fem = t_max_fem * rpm_vals * 2 * math.pi / 60.0
     p_env = t_envelope * rpm_dense * 2 * math.pi / 60.0
     ax2.plot(rpm_vals, p_fem, "bs-", label="FEA max power", markersize=5)
@@ -681,19 +765,8 @@ def parse_args():
         description="FEMM 2D SPMSM template – comprehensive motor analysis.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    p.add_argument(
-        "--analysis", nargs="+", default=["basic"],
-        help="Analysis to run (space or comma separated). Options:\n"
-             "  basic      – torque/loss/temperature waveforms\n"
-             "  field      – flux density cloud + flux lines\n"
-             "  airgap     – airgap Bn/Bt distribution\n"
-             "  cogging    – cogging torque curve\n"
-             "  inductance – Ld/Lq vs rotor position\n"
-             "  emap       – efficiency map\n"
-             "  tncurve    – torque‑speed curve (requires emap)\n"
-             "  all        – run every analysis\n"
-             "Default: basic",
-    )
+    p.add_argument("--analysis", nargs="+", default=["basic"],
+                   help="Options: basic, field, airgap, cogging, inductance, emap, tncurve, all.")
     p.add_argument("--rpm-list", nargs="+", default=["1000", "1500", "2000"],
                    help="Speed list (rpm) for basic analysis.")
     p.add_argument("--iq-list", nargs="+", default=["15", "25", "35"],
@@ -702,20 +775,14 @@ def parse_args():
     p.add_argument("--out", type=Path, default=Path("output_femm"), help="Output folder.")
     p.add_argument("--show", action="store_true", help="Show matplotlib figures.")
     p.add_argument("--show-femm", action="store_true", help="Show FEMM GUI.")
-    # emap specific
-    p.add_argument("--emap-rpm", nargs="+", default=["500,1000,1500,2000,2500,3000"],
-                   help="Speed list for efficiency map.")
-    p.add_argument("--emap-iq", nargs="+", default=["5,10,15,20,25,30,35"],
-                   help="Current list for efficiency map.")
-    p.add_argument("--emap-pts", type=int, default=12,
-                   help="Points per electrical cycle for efficiency map (fewer = faster).")
-    # inductance / cogging
-    p.add_argument("--cogging-steps", type=int, default=72,
-                   help="Steps per slot pitch for cogging torque.")
-    p.add_argument("--ind-steps", type=int, default=37,
-                   help="Steps per electrical cycle for inductance.")
-    p.add_argument("--ind-current", type=float, default=1.0,
-                   help="Test current (A) for inductance measurement.")
+    p.add_argument("--workers", type=int, default=1, help="Number of parallel FEMM workers (default 1).")
+    
+    p.add_argument("--emap-rpm", nargs="+", default=["500,1000,1500,2000,2500,3000"])
+    p.add_argument("--emap-iq", nargs="+", default=["5,10,15,20,25,30,35"])
+    p.add_argument("--emap-pts", type=int, default=12)
+    p.add_argument("--cogging-steps", type=int, default=72)
+    p.add_argument("--ind-steps", type=int, default=37)
+    p.add_argument("--ind-current", type=float, default=1.0)
     return p.parse_args()
 
 
@@ -723,23 +790,12 @@ def open_femm_or_raise(show_femm: bool):
     try:
         femm.openfemm(0 if show_femm else 1)
     except Exception as exc:
-        raise SystemExit(
-            "Failed to connect FEMM COM server (femm.ActiveFEMM).\n"
-            "Likely causes:\n"
-            "  1) FEMM 4.2 is not installed.\n"
-            "  2) FEMM COM server is not registered.\n\n"
-            "Fix steps (run in Administrator CMD):\n"
-            '  "C:\\Program Files (x86)\\FEMM42\\femm.exe" /regserver\n\n'
-            "Verify registration:\n"
-            "  reg query HKCR\\femm.ActiveFEMM\n\n"
-            f"Original error: {exc}"
-        ) from exc
+        raise SystemExit(f"Failed to connect FEMM COM server. Ensure FEMM 4.2 is installed and registered. {exc}") from exc
 
 
 def main():
     args = parse_args()
-
-    # resolve analysis set
+    # multiprocessing entry point guard handled naturally
     raw_analyses = []
     for item in args.analysis:
         raw_analyses.extend(re.split(r"[\s,]+", item.strip().lower()))
@@ -748,9 +804,8 @@ def main():
     else:
         analyses = set(raw_analyses) & ALL_ANALYSES
     if not analyses:
-        print("No valid analysis selected. Choose from:", ", ".join(sorted(ALL_ANALYSES)))
+        print("No valid analysis selected.")
         return
-    # tncurve requires emap
     if "tncurve" in analyses:
         analyses.add("emap")
 
@@ -762,37 +817,42 @@ def main():
     cfg = SweepCfg(points_per_electrical_cycle=args.points)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    open_femm_or_raise(args.show_femm)
-
-    print(f"Selected analyses: {', '.join(sorted(analyses))}\n")
+    
+    # We delay opening FEMM globally until we are sure we are not running purely in parallel
+    print(f"Selected analyses: {', '.join(sorted(analyses))}")
+    print(f"Workers allocated: {args.workers}\n")
 
     try:
-        # ── basic + field + airgap ───────────────────
+        # Sequential/Parallel routing
         if analyses & {"basic", "field", "airgap"}:
             summary_rows = []
-            for rpm in rpm_list:
-                for iq in iq_list:
-                    case_tag = f"rpm{int(rpm)}_iq{int(iq)}"
-                    print(f"Running FEMM case: {case_tag}")
-                    rows = run_one_case(machine, loss, cfg, rpm, iq)
+            
+            if args.workers > 1:
+                tasks = [(machine, loss, r, i, args.points, args.out, args.show, analyses) 
+                         for r in rpm_list for i in iq_list]
+                         
+                with ProcessPoolExecutor(max_workers=args.workers) as executor:
+                    for future in tqdm(as_completed([executor.submit(_worker_basic, t) for t in tasks]), 
+                                       total=len(tasks), desc="Basic/Field Sweep"):
+                        summary_rows.append(future.result())
+            else:
+                open_femm_or_raise(args.show_femm)
+                for rpm in tqdm(rpm_list, desc="RPM List"):
+                    for iq in tqdm(iq_list, desc="Iq List", leave=False):
+                        case_tag = f"rpm{int(rpm)}_iq{int(iq)}"
+                        rows = run_one_case(machine, loss, cfg, rpm, iq, progress=True)
 
-                    if "basic" in analyses:
-                        csv_path, png_path = save_case_outputs(
-                            rows, args.out, case_tag, args.show)
+                        if "basic" in analyses:
+                            save_case_outputs(rows, args.out, case_tag, args.show)
+                        if "field" in analyses:
+                            plot_field_maps(machine, args.out, case_tag, args.show)
+                        if "airgap" in analyses:
+                            plot_airgap_flux_density(machine, args.out, case_tag, args.show)
 
-                    # post‑process the LAST solved position (solution still loaded)
-                    if "field" in analyses:
-                        print(f"  Generating field maps …")
-                        plot_field_maps(machine, args.out, case_tag, args.show)
-
-                    if "airgap" in analyses:
-                        print(f"  Generating airgap B …")
-                        plot_airgap_flux_density(machine, args.out, case_tag, args.show)
-
-                    avg_torque = float(np.mean(rows[:, 5]))
-                    avg_loss = float(np.mean(rows[:, 9]))
-                    final_temp = float(rows[-1, 10])
-                    summary_rows.append((rpm, iq, avg_torque, avg_loss, final_temp))
+                        avg_torque = float(np.mean(rows[:, 5]))
+                        avg_loss = float(np.mean(rows[:, 9]))
+                        final_temp = float(rows[-1, 10])
+                        summary_rows.append((rpm, iq, avg_torque, avg_loss, final_temp))
 
             if "basic" in analyses and summary_rows:
                 summary = np.array(summary_rows, dtype=float)
@@ -800,24 +860,21 @@ def main():
                            header="rpm,iq_peak_a,avg_torque_nm,avg_total_loss_w,final_temp_c",
                            comments="")
                 print("\nBasic summary written to:", args.out / "femm_summary.csv")
-                for r in summary_rows:
-                    print(f"  rpm={r[0]:.0f}, iq={r[1]:.1f} A, Tavg={r[2]:.3f} N·m, "
-                          f"Pavg={r[3]:.2f} W, Tend={r[4]:.2f} °C")
 
-        # ── cogging ──────────────────────────────────
+        # Fallback to main FEMM instance for remaining sequential parts
+        if ("cogging" in analyses) or ("inductance" in analyses) or (args.workers == 1 and "emap" in analyses):
+            try: femm.openfemm(0 if args.show_femm else 1)
+            except: pass # Might already be open
+            
         if "cogging" in analyses:
             print("\n── Cogging torque analysis ──")
-            run_cogging_torque(machine, args.out, num_steps=args.cogging_steps,
-                               show=args.show)
+            run_cogging_torque(machine, args.out, num_steps=args.cogging_steps, show=args.show)
 
-        # ── inductance ───────────────────────────────
         if "inductance" in analyses:
             print("\n── Inductance analysis ──")
-            run_inductance_analysis(machine, args.out,
-                                    test_current=args.ind_current,
+            run_inductance_analysis(machine, args.out, test_current=args.ind_current,
                                     num_steps=args.ind_steps, show=args.show)
 
-        # ── efficiency map ───────────────────────────
         emap_data = None
         if "emap" in analyses:
             print("\n── Efficiency map ──")
@@ -825,14 +882,11 @@ def main():
             emap_iq = parse_list(args.emap_iq)
             emap_data = run_efficiency_map(machine, loss, emap_rpm, emap_iq,
                                            args.out, points_per_cycle=args.emap_pts,
-                                           show=args.show)
+                                           show=args.show, workers=args.workers)
 
-        # ── torque‑speed curve ───────────────────────
         if "tncurve" in analyses and emap_data is not None:
             print("\n── Torque‑speed curve ──")
             plot_torque_speed_curve(machine, drive, emap_data, args.out, args.show)
-
-        print("\n✓ All analyses complete. Output folder:", args.out)
 
     finally:
         try:
@@ -840,6 +894,6 @@ def main():
         except Exception:
             pass
 
-
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
