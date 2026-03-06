@@ -5,5 +5,5 @@ __pycache__/
 # Generated outputs
 # output/
 # output_smoke/
-output_femm/
+# output_femm/
 output_femm_smoke/
