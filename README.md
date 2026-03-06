@@ -1,16 +1,9 @@
-﻿# 人形机器人关节电机/PMSM 示例项目
+﻿# 人形机器人关节电机 / PMSM 仿真项目
 
 本目录包含两条仿真路径：
 
-1. `design_pmsm.py`
-- 基于 `dq` 模型的快速表贴式永磁同步电机（SPMSM）仿真。
-- 输入包括母线电压、电机几何和材料参数。
-- 输出电磁转矩、损耗与温升波形。
-
-2. `femm_spm_template.py`
-- 基于 FEMM 的 2D 有限元模板。
-- 自动建模 + 转速/负载扫点。
-- 输出转矩/损耗/温升波形到 CSV/PNG。
+1. `design_pmsm.py` — 基于 dq 模型的快速 SPMSM 仿真
+2. `femm_spm_template.py` — 基于 FEMM 的 2D 有限元综合分析
 
 ## 目录结构
 
@@ -19,17 +12,13 @@ motor design/
   design_pmsm.py
   femm_spm_template.py
   requirements.txt
-  run.ps1
-  run.bat
+  run.ps1 / run.bat
   README.md
-  output/
-    pmsm_waveforms.csv
-    pmsm_waveforms.png
+  output/                  ← dq 模型输出
+  output_femm/             ← FEMM 有限元输出
 ```
 
 ## 1）环境准备
-
-如果你使用 conda：
 
 ```powershell
 conda create -n motor python=3.11 -y
@@ -37,75 +26,167 @@ conda activate motor
 pip install -r requirements.txt
 ```
 
-如果 PowerShell 中识别不到 `conda`，先执行一次：
+FEMM 有限元路径还需要：
 
-```powershell
-D:\miniconda3\Scripts\conda.exe init powershell
-```
-
-然后重启 VS Code 和终端。
+1. 安装 [FEMM 4.2](https://www.femm.info/wiki/Download)（Windows）
+2. 以管理员 CMD 注册 COM 服务器：
+   ```bat
+   "C:\FEMM42\femm.exe" /regserver
+   ```
 
 ## 2）快速运行（dq 模型）
-
-PowerShell：
-
-```powershell
-.\run.ps1
-```
-
-CMD：
-
-```bat
-run.bat
-```
-
-手动运行：
 
 ```powershell
 python .\design_pmsm.py --save-csv --save-png --out .\output
 ```
 
-常用参数：
+或一键脚本：`.\run.ps1` / `run.bat`
 
-- `--vdc 540`
-- `--dt 5e-5`
-- `--t-end 6.0`
-- `--no-show`
-
-仿真输出文件（默认在 `output/`）：
-
-- `pmsm_waveforms.csv`
-- `pmsm_waveforms.png`
-
-## 3）仿真波形示例（dq 模型）
-
-运行 `design_pmsm.py` 后会生成如下波形图：
+### dq 模型仿真波形
 
 ![dq 模型仿真波形](output/pmsm_waveforms.png)
 
-## 4）FEMM 有限元模板
+## 3）FEMM 有限元分析
 
-前置条件：
+### 可用分析项
 
-1. 安装 FEMM 4.2（Windows）。
-2. 安装 `pyfemm`（`pip install pyfemm`）。
+通过 `--analysis` 参数选择要执行的分析（可同时选多项）：
 
-运行一次扫点：
+| 分析项 | 说明 | 输出文件 |
+|--------|------|----------|
+| `basic` | 转矩/损耗/温升波形 | `femm_waveforms_*.png/.csv`, `femm_summary.csv` |
+| `field` | 磁密云图 + 磁力线图 | `field_density_*.png`, `field_lines_*.png` |
+| `airgap` | 气隙磁密分布（Bn/Bt） | `airgap_B_*.png/.csv` |
+| `cogging` | 齿槽转矩曲线 | `cogging_torque.png/.csv` |
+| `inductance` | Ld/Lq 电感参数 | `inductance.png/.csv` |
+| `emap` | 效率 Map | `efficiency_map.png/.csv` |
+| `tncurve` | 转矩-转速/功率-转速曲线 | `torque_speed_curve.png` |
+| `all` | 以上全部 | 所有文件 |
+
+### 运行示例
+
+**只跑基本波形分析（默认）：**
 
 ```powershell
-python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" --points 72 --out .\output_femm
+python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" --out .\output_femm
 ```
 
-常用选项：
+**磁密云图 + 磁力线 + 气隙磁密（单工况）：**
 
-- `--show`：显示 matplotlib 图。
-- `--show-femm`：显示 FEMM 图形界面。
+```powershell
+python .\femm_spm_template.py --analysis field airgap --rpm-list "1000" --iq-list "25" --out .\output_femm
+```
 
-输出文件：
+**齿槽转矩分析：**
 
-- `output_femm/femm_waveforms_*.csv`
-- `output_femm/femm_waveforms_*.png`
-- `output_femm/femm_summary.csv`
+```powershell
+python .\femm_spm_template.py --analysis cogging --cogging-steps 72 --out .\output_femm
+```
+
+**电感分析（Ld/Lq）：**
+
+```powershell
+python .\femm_spm_template.py --analysis inductance --ind-current 1.0 --ind-steps 37 --out .\output_femm
+```
+
+**效率 Map + 转矩-转速曲线：**
+
+```powershell
+python .\femm_spm_template.py --analysis emap tncurve --emap-rpm "500,1000,1500,2000,2500,3000" --emap-iq "5,10,15,20,25,30,35" --emap-pts 12 --out .\output_femm
+```
+
+**一次跑全部分析：**
+
+```powershell
+python .\femm_spm_template.py --analysis all --rpm-list "1000" --iq-list "15" --points 36 --emap-rpm "500,1000,2000" --emap-iq "10,20,30" --emap-pts 6 --out .\output_femm
+```
+
+### 常用参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--analysis` | `basic` | 选择分析项 |
+| `--rpm-list` | `1000,1500,2000` | 转速列表 (rpm) |
+| `--iq-list` | `15,25,35` | 电流峰值列表 (A) |
+| `--points` | `72` | 基本分析每电周期采样点 |
+| `--out` | `output_femm` | 输出目录 |
+| `--show` | off | 显示 matplotlib 图 |
+| `--show-femm` | off | 显示 FEMM 界面 |
+| `--emap-rpm` | `500,...,3000` | 效率 Map 转速列表 |
+| `--emap-iq` | `5,...,35` | 效率 Map 电流列表 |
+| `--emap-pts` | `12` | 效率 Map 每电周期采样点 |
+| `--cogging-steps` | `72` | 齿槽转矩分析步数 |
+| `--ind-steps` | `37` | 电感分析步数 |
+| `--ind-current` | `1.0` | 电感分析测试电流 (A) |
+
+### 运行时间参考
+
+| 分析项 | 大致耗时 |
+|--------|----------|
+| basic (1 工况, 72 步) | 2 ~ 5 分钟 |
+| field + airgap | 在 basic 基础上 +1 分钟 |
+| cogging (72 步) | 2 ~ 5 分钟 |
+| inductance (37 步 × 2 轴) | 3 ~ 8 分钟 |
+| emap (6×7=42 工况, 12 步) | 15 ~ 40 分钟 |
+| all（精简参数） | 10 ~ 20 分钟 |
+
+> **提示：** 减少采样点可显著加速，如 `--points 12` 或 `--emap-pts 6`。
+
+---
+
+## 4）仿真结果展示
+
+以下为 FEMM 有限元分析的各项输出：
+
+### 4.1 磁密云图
+
+极坐标下截面 |B| 分布，颜色表示磁通密度大小。
+
+![磁密云图](output_femm/field_density_rpm1000_iq15.png)
+
+### 4.2 磁力线图
+
+等磁矢位 (Az) 线即为磁力线分布。
+
+![磁力线图](output_femm/field_lines_rpm1000_iq15.png)
+
+### 4.3 气隙磁密分布
+
+沿气隙中线提取的径向分量 Bn 和切向分量 Bt。
+
+![气隙磁密](output_femm/airgap_B_rpm1000_iq15.png)
+
+### 4.4 电磁转矩 / 损耗 / 温升波形
+
+一个电周期内的转矩波形、各项损耗及绕组温升。
+
+![电磁转矩波形](output_femm/femm_waveforms_rpm1000_iq15.png)
+
+### 4.5 齿槽转矩曲线
+
+零电流条件下转子旋转一个槽距的转矩波动。
+
+![齿槽转矩](output_femm/cogging_torque.png)
+
+### 4.6 电感参数（Ld / Lq）
+
+d 轴和 q 轴电感随转子位置的变化（SPM 电机 Ld ≈ Lq）。
+
+![电感](output_femm/inductance.png)
+
+### 4.7 效率 Map
+
+转速 × 转矩平面上的效率等高线。
+
+![效率Map](output_femm/efficiency_map.png)
+
+### 4.8 转矩-转速 / 功率-转速曲线
+
+FEA 最大转矩点与解析电压约束包络线对比。
+
+![转矩-转速曲线](output_femm/torque_speed_curve.png)
+
+---
 
 ## 5）说明
 
@@ -117,24 +198,16 @@ python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" -
 
 ## 6）FEMM 故障排查
 
-如果 PowerShell 把列表参数拆开，可用以下任一写法：
+如果报错包含 `Invalid class string` 或 `femm.ActiveFEMM`，说明 FEMM COM 未注册。
+以管理员 CMD 执行：
+
+```bat
+"C:\FEMM42\femm.exe" /regserver
+reg query HKCR\femm.ActiveFEMM
+```
+
+如果 PowerShell 中运行报参数解析错误，请用引号包裹列表参数：
 
 ```powershell
 python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35"
 ```
-
-或
-
-```powershell
-python .\femm_spm_template.py --rpm-list 1000 1500 2000 --iq-list 15 25 35
-```
-
-如果报错包含 `Invalid class string` 或 `femm.ActiveFEMM`，说明 FEMM COM 未注册。
-请在“管理员 CMD”执行：
-
-```bat
-"C:\Program Files (x86)\FEMM42\femm.exe" /regserver
-reg query HKCR\femm.ActiveFEMM
-```
-
-如路径不存在，请改成你本机 FEMM 的实际安装路径。
