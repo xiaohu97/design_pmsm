@@ -1,213 +1,196 @@
-﻿# 人形机器人关节电机 / PMSM 仿真项目
+﻿# Humanoid Robot Joint Motor / PMSM Simulation
 
-本目录包含两条仿真路径：
+[中文版 (Chinese Version)](README_zh.md)
 
-1. `design_pmsm.py` — 基于 dq 模型的快速 SPMSM 仿真
-2. `femm_spm_template.py` — 基于 FEMM 的 2D 有限元综合分析
+**A comprehensive, open-source simulation toolkit for rapid robot joint motor analysis, finite element evaluation, and control system integration.**
 
-## 目录结构
+This repository bridges the gap between electromagnetic design and control engineering, providing a **FOC-ready model** of an **SPMSM** (Surface Permanent Magnet Synchronous Motor) that can be easily integrated into **MATLAB/Simulink** or Python-based systems.
 
-```text
-motor design/
-  design_pmsm.py
-  femm_spm_template.py
-  requirements.txt
-  run.ps1 / run.bat
-  README.md
-  output/                  ← dq 模型输出
-  output_femm/             ← FEMM 有限元输出
-```
+## 🎯 Use Cases
+- **Humanoid joint / actuator pre-design**: Rapid evaluation, sizing, and electromagnetic performance estimation.
+- **Control simulation**: Algorithm validation using a fast, analytical **dq model**.
+- System-level design: Deriving **torque-speed** characteristics and efficiency maps for **robot joint motor** systems.
 
-## 1）环境准备
+## ✨ Simulation Results
+*(Example: Electromagnetic Field Density mapped via FEMM FEA)*
+![Field Density](output_femm/field_density_rpm1000_iq15.png)
 
+## 🚀 5-Minute Quick Start
+
+**1. Setup Environment**
 ```powershell
 conda create -n motor python=3.11 -y
 conda activate motor
 pip install -r requirements.txt
 ```
 
-FEMM 有限元路径还需要：
-
-1. 安装 [FEMM 4.2](https://www.femm.info/wiki/Download)（Windows）
-2. 以管理员 CMD 注册 COM 服务器：
-   ```bat
-   "C:\FEMM42\femm.exe" /regserver
-   ```
-
-## 2）快速运行（dq 模型）
-
+**2. Fast Analytical dq Model Simulation**
 ```powershell
 python .\design_pmsm.py --save-csv --save-png --out .\output
+# Or simply execute the quick script: .\run.ps1
 ```
 
-或一键脚本：`.\run.ps1` / `run.bat`
+**3. FEMM 2D Finite Element Analysis (Windows)**
+- Install [FEMM 4.2](https://www.femm.info/wiki/Download).
+- Register the COM server (Run CMD as Administrator):
+  ```bat
+  "C:\FEMM42\femm.exe" /regserver
+  ```
+- Run a basic FEA simulation:
+  ```powershell
+  python .\femm_spm_template.py --rpm-list "1000,1500" --iq-list "15,25" --out .\output_femm
+  ```
 
-### dq 模型仿真波形
+---
+## 📁 Repository Structure
+```text
+motor design/
+  design_pmsm.py        ← Fast SPMSM simulation (dq model)
+  femm_spm_template.py  ← Comprehensive 2D FEA template (FEMM)
+  requirements.txt
+  run.ps1 / run.bat
+  README.md
+  output/               ← dq model output
+  output_femm/          ← FEMM output
+```
 
-![dq 模型仿真波形](output/pmsm_waveforms.png)
+## 🔍 Detailed FEMM Analysis Features
 
-## 3）FEMM 有限元分析
+Use the `--analysis` parameter to select the analysis types to execute (multiple can be selected):
 
-### 可用分析项
-
-通过 `--analysis` 参数选择要执行的分析（可同时选多项）：
-
-| 分析项 | 说明 | 输出文件 |
+| Analysis Type | Description | Output Files |
 |--------|------|----------|
-| `basic` | 转矩/损耗/温升波形 | `femm_waveforms_*.png/.csv`, `femm_summary.csv` |
-| `field` | 磁密云图 + 磁力线图 | `field_density_*.png`, `field_lines_*.png` |
-| `airgap` | 气隙磁密分布（Bn/Bt） | `airgap_B_*.png/.csv` |
-| `cogging` | 齿槽转矩曲线 | `cogging_torque.png/.csv` |
-| `inductance` | Ld/Lq 电感参数 | `inductance.png/.csv` |
-| `emap` | 效率 Map | `efficiency_map.png/.csv` |
-| `tncurve` | 转矩-转速/功率-转速曲线 | `torque_speed_curve.png` |
-| `all` | 以上全部 | 所有文件 |
+| `basic` | Torque / Loss / Temp Rise Waveforms | `femm_waveforms_*.png/.csv`, `femm_summary.csv` |
+| `field` | Flux Density Map & Lines | `field_density_*.png`, `field_lines_*.png` |
+| `airgap` | Airgap Flux Density (Bn/Bt) | `airgap_B_*.png/.csv` |
+| `cogging` | Cogging Torque | `cogging_torque.png/.csv` |
+| `inductance` | Ld/Lq Inductance Parameters | `inductance.png/.csv` |
+| `emap` | Efficiency Map | `efficiency_map.png/.csv` |
+| `tncurve` | Torque-Speed / Power-Speed Curves | `torque_speed_curve.png` |
+| `all` | Run all the above | All files |
 
-### 运行示例
+### FEMM Running Examples
 
-**只跑基本波形分析（默认）：**
-
+**Basic Waveform Analysis (Default):**
 ```powershell
 python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35" --out .\output_femm
 ```
 
-**磁密云图 + 磁力线 + 气隙磁密（单工况）：**
-
+**Flux Density + Magnetic Lines + Airgap (Single Operating Point):**
 ```powershell
 python .\femm_spm_template.py --analysis field airgap --rpm-list "1000" --iq-list "25" --out .\output_femm
 ```
 
-**齿槽转矩分析：**
-
+**Cogging Torque Analysis:**
 ```powershell
 python .\femm_spm_template.py --analysis cogging --cogging-steps 72 --out .\output_femm
 ```
 
-**电感分析（Ld/Lq）：**
-
+**Inductance Analysis (Ld/Lq):**
 ```powershell
 python .\femm_spm_template.py --analysis inductance --ind-current 1.0 --ind-steps 37 --out .\output_femm
 ```
 
-**效率 Map + 转矩-转速曲线：**
-
+**Efficiency Map + Torque-Speed Curve:**
 ```powershell
 python .\femm_spm_template.py --analysis emap tncurve --emap-rpm "500,1000,1500,2000,2500,3000" --emap-iq "5,10,15,20,25,30,35" --emap-pts 12 --out .\output_femm
 ```
 
-**一次跑全部分析：**
-
+**Run All Analysis Types at Once:**
 ```powershell
 python .\femm_spm_template.py --analysis all --rpm-list "1000" --iq-list "15" --points 36 --emap-rpm "500,1000,2000" --emap-iq "10,20,30" --emap-pts 6 --out .\output_femm
 ```
 
-### 常用参数
-
-| 参数 | 默认值 | 说明 |
+### Common Parameters
+| Parameter | Default | Description |
 |------|--------|------|
-| `--analysis` | `basic` | 选择分析项 |
-| `--rpm-list` | `1000,1500,2000` | 转速列表 (rpm) |
-| `--iq-list` | `15,25,35` | 电流峰值列表 (A) |
-| `--points` | `72` | 基本分析每电周期采样点 |
-| `--out` | `output_femm` | 输出目录 |
-| `--show` | off | 显示 matplotlib 图 |
-| `--show-femm` | off | 显示 FEMM 界面 |
-| `--emap-rpm` | `500,...,3000` | 效率 Map 转速列表 |
-| `--emap-iq` | `5,...,35` | 效率 Map 电流列表 |
-| `--emap-pts` | `12` | 效率 Map 每电周期采样点 |
-| `--cogging-steps` | `72` | 齿槽转矩分析步数 |
-| `--ind-steps` | `37` | 电感分析步数 |
-| `--ind-current` | `1.0` | 电感分析测试电流 (A) |
+| `--analysis` | `basic` | Selected analysis items |
+| `--rpm-list` | `1000,1500,2000` | Speed list (rpm) |
+| `--iq-list` | `15,25,35` | Peak current list (A) |
+| `--points` | `72` | Sampling points per electrical cycle |
+| `--out` | `output_femm` | Output directory |
+| `--show` | off | Show matplotlib figures interactively |
+| `--show-femm` | off | Show FEMM GUI |
+| `--emap-rpm` | `500,...,3000`| Speed list for Efficiency Map |
+| `--emap-iq` | `5,...,35`  | Current list for Efficiency Map |
+| `--emap-pts` | `12`       | Sampling points for Efficiency Map |
+| `--cogging-steps`| `72`   | Steps for Cogging Torque |
+| `--ind-steps`  | `37`     | Steps for Inductance Analysis |
+| `--ind-current`| `1.0`    | Test current for Inductance (A) |
 
-### 运行时间参考
-
-| 分析项 | 大致耗时 |
+### Runtime Reference (Approximations)
+| Analysis Type | Est. Time |
 |--------|----------|
-| basic (1 工况, 72 步) | 2 ~ 5 分钟 |
-| field + airgap | 在 basic 基础上 +1 分钟 |
-| cogging (72 步) | 2 ~ 5 分钟 |
-| inductance (37 步 × 2 轴) | 3 ~ 8 分钟 |
-| emap (6×7=42 工况, 12 步) | 15 ~ 40 分钟 |
-| all（精简参数） | 10 ~ 20 分钟 |
+| basic (1 condition, 72 steps) | 2 ~ 5 mins |
+| field + airgap | basic + 1 min |
+| cogging (72 steps) | 2 ~ 5 mins |
+| inductance (37 steps × 2 axes) | 3 ~ 8 mins |
+| emap (42 conditions, 12 steps) | 15 ~ 40 mins |
+| all (simplified parameters) | 10 ~ 20 mins |
 
-> **提示：** 减少采样点可显著加速，如 `--points 12` 或 `--emap-pts 6`。
-
----
-
-## 4）仿真结果展示
-
-以下为 FEMM 有限元分析的各项输出：
-
-### 4.1 磁密云图
-
-极坐标下截面 |B| 分布，颜色表示磁通密度大小。
-
-![磁密云图](output_femm/field_density_rpm1000_iq15.png)
-
-### 4.2 磁力线图
-
-等磁矢位 (Az) 线即为磁力线分布。
-
-![磁力线图](output_femm/field_lines_rpm1000_iq15.png)
-
-### 4.3 气隙磁密分布
-
-沿气隙中线提取的径向分量 Bn 和切向分量 Bt。
-
-![气隙磁密](output_femm/airgap_B_rpm1000_iq15.png)
-
-### 4.4 电磁转矩 / 损耗 / 温升波形
-
-一个电周期内的转矩波形、各项损耗及绕组温升。
-
-![电磁转矩波形](output_femm/femm_waveforms_rpm1000_iq15.png)
-
-### 4.5 齿槽转矩曲线
-
-零电流条件下转子旋转一个槽距的转矩波动。
-
-![齿槽转矩](output_femm/cogging_torque.png)
-
-### 4.6 电感参数（Ld / Lq）
-
-d 轴和 q 轴电感随转子位置的变化（SPM 电机 Ld ≈ Lq）。
-
-![电感](output_femm/inductance.png)
-
-### 4.7 效率 Map
-
-转速 × 转矩平面上的效率等高线。
-
-![效率Map](output_femm/efficiency_map.png)
-
-### 4.8 转矩-转速 / 功率-转速曲线
-
-FEA 最大转矩点与解析电压约束包络线对比。
-
-![转矩-转速曲线](output_femm/torque_speed_curve.png)
+> **Tip:** Reducing sampling points (e.g., `--points 12` or `--emap-pts 6`) significantly accelerates the simulation.
 
 ---
 
-## 5）说明
+## 📊 Extensive Simulation Gallery
 
-- `design_pmsm.py` 适合做控制与参数趋势的快速评估。
-- `femm_spm_template.py` 更接近场路仿真，但当前仍是模板：
-  - 槽型/绕组布置做了简化；
-  - 铁耗/磁钢损耗为半经验模型；
-  - 若用于工程定型，请替换为真实几何、材料与 B-H 曲线数据。
+### 4.1 Fast dq Model Waveforms
+![dq Model Waveforms](output/pmsm_waveforms.png)
 
-## 6）FEMM 故障排查
+### 4.2 Flux Density Map
+Polar representation of |B| magnitude cross-section.
+![Flux Density Map](output_femm/field_density_rpm1000_iq15.png)
 
-如果报错包含 `Invalid class string` 或 `femm.ActiveFEMM`，说明 FEMM COM 未注册。
-以管理员 CMD 执行：
+### 4.3 Magnetic Field Lines
+Equipotential (Az) lines manifesting as magnetic field line distribution.
+![Field Lines Map](output_femm/field_lines_rpm1000_iq15.png)
 
+### 4.4 Airgap Flux Density
+Radial (Bn) and Tangential (Bt) components extracted along the airgap mid-line.
+![Airgap Flux](output_femm/airgap_B_rpm1000_iq15.png)
+
+### 4.5 Waveforms (Torque / Loss / Temperature Rise)
+One electrical cycle displaying electromagnetic torque, various core/winding losses, and temperature rise.
+![Waveforms](output_femm/femm_waveforms_rpm1000_iq15.png)
+
+### 4.6 Cogging Torque
+Torque ripple produced by rotor rotating across one slot pitch at zero current.
+![Cogging Torque](output_femm/cogging_torque.png)
+
+### 4.7 Inductance Parameters (Ld / Lq)
+Variation of d-axis and q-axis inductances against rotor position (For SPMSM, Ld ≈ Lq).
+![Inductance](output_femm/inductance.png)
+
+### 4.8 Efficiency Map
+Efficiency contours on the speed × torque plane.
+![Efficiency Map](output_femm/efficiency_map.png)
+
+### 4.9 Torque-Speed Curves
+FEA max torque operating points alongside theoretical voltage constraint envelopes.
+![Torque-Speed Curve](output_femm/torque_speed_curve.png)
+
+---
+
+## 💡 Technical Notes
+
+- `design_pmsm.py` is highly suitable for rapid control law testing and parameter trend estimation.
+- `femm_spm_template.py` offers closer-to-truth field-circuit co-simulation but serves as a generic template:
+  - Slot geometries and winding arrangements are simplified.
+  - Iron loss and magnet loss are based on semi-empirical models.
+  - If used for rigorous engineering validation, please replace it with real geometry, material properties, and authentic B-H curve data.
+
+## 🛠 Troubleshooting (FEMM)
+
+If you encounter an `Invalid class string` or `femm.ActiveFEMM` error, the FEMM COM server is not properly registered. Run CMD as Administrator:
 ```bat
 "C:\FEMM42\femm.exe" /regserver
+```
+Check if it succeeded via:
+```bat
 reg query HKCR\femm.ActiveFEMM
 ```
 
-如果 PowerShell 中运行报参数解析错误，请用引号包裹列表参数：
-
+If PowerShell throws a parameter list parsing error, enclose the list elements in quotes:
 ```powershell
 python .\femm_spm_template.py --rpm-list "1000,1500,2000" --iq-list "15,25,35"
 ```
