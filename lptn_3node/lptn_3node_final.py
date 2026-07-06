@@ -251,77 +251,124 @@ def cost_fast(p15, ctx):
 
 
 # ============================================================
-# Phase-1: 堵转段单节点辨识
+# Phase-1: 堵转段单节点辨识 (分段独立仿真, 每段实测初值)
 # ============================================================
-def run_phase1(data, config):
+def extract_lock_segments(data, config, min_pts=10):
+    """按时间连续性把堵转数据切成独立段, 避免跨运行段拼接积分"""
+    max_gap = 3.0 * config.get('resample_dt', 1)
     omega = data['omega'].values
     lock_mask = np.abs(omega) < config.get('lock_speed_thresh', 0.5)
-    if np.sum(lock_mask) < 10:
-        print("  Phase-1: 堵转数据不足, 跳过")
-        return None
+    idx = np.where(lock_mask)[0]
+    t_all = data['t'].values
+    segments, start = [], 0
+    for k in range(1, len(idx) + 1):
+        end_of_run = (k == len(idx) or idx[k] != idx[k-1] + 1
+                      or t_all[idx[k]] - t_all[idx[k-1]] > max_gap)
+        if not end_of_run:
+            continue
+        seg_idx = idx[start:k]
+        start = k
+        if len(seg_idx) < min_pts:
+            continue
+        d = data.iloc[seg_idx]
+        t = d['t'].values
+        dt_arr = np.diff(t)
+        dt_safe = np.where(dt_arr > 0, dt_arr, 1.0)
+        T1 = d['T1'].values
+        segments.append({
+            't': t, 'I2': d['I'].values ** 2,
+            'T1': T1, 'T3': d['T3'].values,
+            'dt': dt_arr, 'dt_safe': dt_safe,
+            'dT1_meas': np.diff(T1) / dt_safe,
+        })
+    return segments
 
-    d_lock = data[lock_mask].reset_index(drop=True)
-    t = d_lock['t'].values
-    I = d_lock['I'].values
-    T1 = d_lock['T1'].values
-    T3 = d_lock['T3'].values
-    I2 = I ** 2
-    dt_arr = np.diff(t)
-    dt_safe = np.where(dt_arr > 0, dt_arr, 1.0)
-    valid = (dt_arr > 0) & (dt_arr <= 30)
-    dT1_meas = np.diff(T1) / dt_safe
 
-    print(f"  Phase-1 data: {len(d_lock)} pts, {t[-1]-t[0]:.0f}s")
-    print(f"    I_rms={np.sqrt(np.mean(I2)):.2f}A, T1: {T1[0]:.1f}→{T1[-1]:.1f}°C (range={T1.max()-T1.min():.1f}°C)")
+def p1_sim_segment(seg, C1, a_eff, R13, alpha_cu, T_ref):
+    """单段前向 Euler, 初值取该段实测 T1[0]"""
+    I2 = seg['I2']; T3 = seg['T3']; dt_arr = seg['dt']
+    N = len(seg['t'])
+    T1s = np.empty(N); T1s[0] = seg['T1'][0]
+    inv_C1 = 1.0 / C1; inv_R13 = 1.0 / R13
+    for k in range(N - 1):
+        # 铜损含温度系数: a_eff · (1 + α · (T1 - T_ref)) · I²
+        P = a_eff * (1.0 + alpha_cu * (T1s[k] - T_ref)) * I2[k]
+        dT = (P - (T1s[k] - T3[k]) * inv_R13) * inv_C1
+        T1s[k+1] = T1s[k] + dT * dt_arr[k]
+    return T1s
 
-    def p1_sim(C1, a_eff, R13):
-        N = len(t)
-        T1s = np.empty(N); T1s[0] = T1[0]
-        inv_C1 = 1.0/C1; inv_R13 = 1.0/R13
-        alpha_cu = config.get('alpha_cu', 0.00393)
-        T_ref = config.get('T_ref', 25.0)
-        for k in range(N-1):
-            if not valid[k]:
-                T1s[k+1] = T1s[k]; continue
-            # 铜损含温度系数: a_eff · (1 + α · (T1 - T_ref)) · I²
-            P = a_eff * (1.0 + alpha_cu * (T1s[k] - T_ref)) * I2[k]
-            dT = (P - (T1s[k]-T3[k])*inv_R13) * inv_C1
-            T1s[k+1] = T1s[k] + dT * dt_arr[k]
-        return T1s
 
-    def p1_cost(pvec):
-        C1, a_eff, R13 = pvec
-        try:
-            T1s = p1_sim(C1, a_eff, R13)
-            if np.any(np.isnan(T1s)): return 1e6
-            mse = np.mean((T1s - T1)**2)
-            dT1s = np.diff(T1s) / dt_safe
-            deriv = np.mean((dT1s - dT1_meas)**2)
-            return mse + 0.5 * deriv
-        except: return 1e6
+def p1_cost_segments(pvec, segments, alpha_cu, T_ref):
+    """所有段残差合并 (点数加权): MSE + 0.5·导数MSE"""
+    C1, a_eff, R13 = pvec
+    sq = dsq = 0.0
+    n = dn = 0
+    try:
+        for seg in segments:
+            T1s = p1_sim_segment(seg, C1, a_eff, R13, alpha_cu, T_ref)
+            if np.any(np.isnan(T1s)) or np.any(np.abs(T1s) > 500):
+                return 1e6
+            sq += np.sum((T1s - seg['T1']) ** 2); n += len(T1s)
+            dT1s = np.diff(T1s) / seg['dt_safe']
+            dsq += np.sum((dT1s - seg['dT1_meas']) ** 2); dn += len(dT1s)
+        return sq / n + 0.5 * dsq / dn
+    except Exception:
+        return 1e6
 
+
+def fit_phase1_segments(segments, config, seeds=None, verbose=True):
+    """DE + L-BFGS-B 辨识 (C1, a_eff, R13), 支持任意段子集"""
+    alpha_cu = config.get('alpha_cu', 0.00393)
+    T_ref = config.get('T_ref', 25.0)
     bounds_p1 = [(5, 500), (0.1, 20), (0.1, 50)]
+    if seeds is None:
+        seeds = config.get('phase1_de_seeds', [42, 123, 7])
     best_c, best_x = 1e10, None
-    for seed in config.get('phase1_de_seeds', [42, 123, 7]):
-        print(f"    DE-P1 (seed={seed})...", end=' ', flush=True)
+    for seed in seeds:
+        if verbose: print(f"    DE-P1 (seed={seed})...", end=' ', flush=True)
         t0s = time.time()
-        r = differential_evolution(p1_cost, bounds_p1, seed=seed,
+        r = differential_evolution(p1_cost_segments, bounds_p1,
+            args=(segments, alpha_cu, T_ref), seed=seed,
             maxiter=config.get('phase1_de_maxiter', 150),
             popsize=config.get('phase1_de_popsize', 12),
             tol=1e-9, polish=False, workers=1)
-        r2 = minimize(p1_cost, r.x, method='L-BFGS-B', bounds=bounds_p1,
+        r2 = minimize(p1_cost_segments, r.x, args=(segments, alpha_cu, T_ref),
+            method='L-BFGS-B', bounds=bounds_p1,
             options={'maxiter': 300, 'ftol': 1e-14})
-        print(f"cost={r2.fun:.4f} ({time.time()-t0s:.0f}s)")
+        if verbose: print(f"cost={r2.fun:.4f} ({time.time()-t0s:.0f}s)")
         if r2.fun < best_c:
             best_c, best_x = r2.fun, r2.x
+    return best_x, best_c
 
+
+def run_phase1(data, config):
+    segments = extract_lock_segments(data, config)
+    n_pts = sum(len(s['t']) for s in segments)
+    if n_pts < 10:
+        print("  Phase-1: 堵转数据不足, 跳过")
+        return None
+
+    print(f"  Phase-1 data: {len(segments)} 段共 {n_pts} pts (分段独立仿真)")
+    for i, seg in enumerate(segments):
+        print(f"    [Seg {i+1}] {seg['t'][0]:.0f}~{seg['t'][-1]:.0f}s, "
+              f"I_rms={np.sqrt(np.mean(seg['I2'])):.2f}A, "
+              f"T1: {seg['T1'][0]:.1f}→{seg['T1'][-1]:.1f}°C (range={seg['T1'].max()-seg['T1'].min():.1f}°C)")
+
+    best_x, _ = fit_phase1_segments(segments, config)
     C1, a_eff, R13 = best_x
-    T1s = p1_sim(C1, a_eff, R13)
-    rmse = np.sqrt(np.mean((T1s - T1)**2))
+
+    alpha_cu = config.get('alpha_cu', 0.00393)
+    T_ref = config.get('T_ref', 25.0)
+    sq, n, maxe = 0.0, 0, 0.0
+    for seg in segments:
+        T1s = p1_sim_segment(seg, C1, a_eff, R13, alpha_cu, T_ref)
+        sq += np.sum((T1s - seg['T1'])**2); n += len(T1s)
+        maxe = max(maxe, np.max(np.abs(T1s - seg['T1'])))
+    rmse = np.sqrt(sq / n)
     print(f"\n  Phase-1 results:")
-    print(f"    C1={C1:.2f} J/K, a_eff={a_eff:.4f} W/A²(@{config.get('T_ref',25)}°C), R13={R13:.4f} K/W")
-    print(f"    α_cu={config.get('alpha_cu',0.00393):.5f} /°C (P_cu∝(1+α·ΔT))")
-    print(f"    Fit: RMSE={rmse:.2f}°C, MaxErr={np.max(np.abs(T1s-T1)):.2f}°C")
+    print(f"    C1={C1:.2f} J/K, a_eff={a_eff:.4f} W/A²(@{T_ref}°C), R13={R13:.4f} K/W")
+    print(f"    α_cu={alpha_cu:.5f} /°C (P_cu∝(1+α·ΔT))")
+    print(f"    Fit: RMSE={rmse:.2f}°C, MaxErr={maxe:.2f}°C")
     return {'C1': C1, 'a_eff': a_eff, 'R13': R13}
 
 
