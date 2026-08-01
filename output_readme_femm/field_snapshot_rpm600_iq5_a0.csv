@@ -1,0 +1,2 @@
+rpm_context,rotor_angle_deg,id_peak_a,iq_peak_a,torque_nm,psi_d_wb,psi_q_wb,mesh
+600.0,0.0,0.0,5.0,2.412079343101895,0.03202333104944609,0.004766482084509933,medium

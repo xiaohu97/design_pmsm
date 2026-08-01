@@ -1,0 +1,10 @@
+metric,value,criterion,limit,passed
+mesh_loaded_torque_relative_change,0.00011880252256182586,<=,0.02,True
+angle_loaded_torque_relative_change,0.0009618085229700137,<=,0.02,True
+mesh_cogging_pp_relative_change,0.07853623953025426,<=,0.1,True
+angle_cogging_pp_relative_change,0.06378050546941127,<=,0.1,True
+load_to_cogging_ratio,75.91079291471104,>=,5.0,True
+load_to_numerical_floor_ratio,658.3581672534918,>=,20.0,True
+integral_quadrature_relative_change,0.0015080726388805536,<=,0.02,True
+integral_radius_relative_spread,0.0012310422190961437,<=,0.05,True
+maxwell_vs_wst_relative_difference,0.001090880690786695,<=,0.1,True

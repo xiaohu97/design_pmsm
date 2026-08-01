@@ -7,3 +7,6 @@ __pycache__/
 # output_smoke/
 # output_femm/
 output_femm_smoke/
+output_quick/
+output_femm_validation/
+output_femm_convergence/

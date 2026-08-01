@@ -1,0 +1,122 @@
+{
+  "source_path": "D:\\motor design\\motor_config.json",
+  "shared_config_sha256": "c66f74c4506bc889c70fa8825aa4ee868dc91c4e43dfe86ed79e77f2ef9f5fac",
+  "shared_config": {
+    "schema_version": 1,
+    "name": "18s20p_spm_demo",
+    "machine": {
+      "pole_pairs": 10,
+      "slots": 18,
+      "stack_length_m": 0.08,
+      "shaft_radius_m": 0.02,
+      "rotor_radius_m": 0.03,
+      "magnet_thickness_m": 0.0015,
+      "airgap_m": 0.0005,
+      "stator_outer_radius_m": 0.06,
+      "outer_air_radius_m": 0.07,
+      "magnet_arc_ratio": 0.85,
+      "turns_per_slot": 25,
+      "series_coils_per_phase": 3,
+      "fundamental_winding_factor": 0.9452136366,
+      "winding_layout": "18s20p_single_layer_v1",
+      "connection": "wye",
+      "slot_depth_m": 0.008
+    },
+    "electromagnetic": {
+      "phase_resistance_20c_ohm": 0.22,
+      "copper_temp_coeff_per_k": 0.00393,
+      "ld_h": 0.0009660890764148228,
+      "lq_h": 0.0009420675310741955,
+      "psi_pm_wb": 0.03201491158003713,
+      "validated_current_peak_a": 5.0,
+      "parameter_source": "FEMM electromagnetic acceptance, medium mesh",
+      "source_physical_model_sha256": "cae1e23d408cbddc550a4c5cca0629572ad61aa277933f937a2d2c386ade03e0"
+    },
+    "materials": {
+      "magnet_br_t": 1.22,
+      "magnet_relative_permeability": 1.05,
+      "steel_library_name": "M-19 Steel",
+      "copper_library_name": "Copper"
+    },
+    "conventions": {
+      "dq_current_basis": "peak",
+      "phase_sequence": "A-B-C",
+      "electrical_zero_offset_deg": -100.0,
+      "electrical_angle_sign": -1,
+      "positive_iq_torque_sign": 1
+    },
+    "drive": {
+      "dc_bus_v": 48.0,
+      "modulation_limit": 0.95,
+      "current_peak_limit_a": 15.0,
+      "inverter_efficiency": 1.0
+    },
+    "losses": {
+      "calibrated": false,
+      "core_loss_ref_w": 0.0,
+      "core_loss_ref_electrical_hz": 100.0,
+      "core_frequency_exponent": 1.5,
+      "core_flux_density_ref_t": 1.2,
+      "magnet_loss_ref_w": 0.0,
+      "magnet_loss_ref_electrical_hz": 100.0,
+      "magnet_frequency_exponent": 2.0,
+      "mechanical_loss_ref_w": 0.0,
+      "mechanical_loss_ref_rpm": 1000.0,
+      "mechanical_speed_exponent": 2.0
+    },
+    "thermal": {
+      "ambient_c": 25.0,
+      "winding_to_case_rth_k_per_w": 0.35,
+      "magnet_to_case_rth_k_per_w": 0.25,
+      "case_to_ambient_rth_k_per_w": 0.15,
+      "winding_temperature_limit_c": 155.0,
+      "magnet_temperature_limit_c": 100.0
+    },
+    "sweep": {
+      "speed_min_rpm": 0.0,
+      "speed_max_rpm": 1500.0,
+      "speed_points": 61,
+      "requested_torque_nm": 2.0,
+      "current_search_points": 2001
+    }
+  },
+  "resolved_femm_machine": {
+    "pole_pairs": 10,
+    "slots": 18,
+    "stack_length_mm": 80.0,
+    "r_shaft_mm": 20.0,
+    "r_rotor_mm": 30.0,
+    "mag_thickness_mm": 1.5,
+    "airgap_mm": 0.5,
+    "r_stator_outer_mm": 60.0,
+    "r_air_outer_mm": 70.0,
+    "magnet_arc_ratio": 0.85,
+    "turns_per_slot": 25,
+    "slot_depth_mm": 8.0,
+    "magnet_br_t": 1.22,
+    "magnet_relative_permeability": 1.05,
+    "steel_material_name": "M-19 Steel",
+    "copper_material_name": "Copper"
+  },
+  "resolved_femm_loss_thermal": {
+    "r_phase_20": 0.22,
+    "alpha_cu": 0.00393,
+    "calibrated": false,
+    "core_loss_ref_w": 0.0,
+    "core_loss_ref_electrical_hz": 100.0,
+    "core_frequency_exponent": 1.5,
+    "core_flux_density_ref_t": 1.2,
+    "magnet_loss_ref_w": 0.0,
+    "magnet_loss_ref_electrical_hz": 100.0,
+    "magnet_frequency_exponent": 2.0,
+    "winding_to_case_rth_k_per_w": 0.35,
+    "magnet_to_case_rth_k_per_w": 0.25,
+    "case_to_ambient_rth_k_per_w": 0.15,
+    "t_amb": 25.0
+  },
+  "resolved_femm_drive": {
+    "v_dc": 48.0,
+    "i_max": 15.0,
+    "modulation_limit": 0.95
+  }
+}

@@ -1,12 +1,8 @@
 param(
-    [string]$EnvName = "motor"
+    [string]$EnvName = "motor",
+    [string]$PythonExe = ""
 )
 
-$ErrorActionPreference = "Stop"
-$CondaExe = "D:\miniconda3\Scripts\conda.exe"
-
-if (Test-Path $CondaExe) {
-    & $CondaExe run -n $EnvName python .\design_pmsm.py --save-csv --save-png --out .\output
-} else {
-    python .\design_pmsm.py --save-csv --save-png --out .\output
-}
+$Entry = Join-Path $PSScriptRoot "motor.ps1"
+& $Entry quick -CondaEnv $EnvName -PythonExe $PythonExe
+exit $LASTEXITCODE
