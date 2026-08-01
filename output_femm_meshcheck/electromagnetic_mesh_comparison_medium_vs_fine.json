@@ -1,0 +1,37 @@
+{
+  "all_passed": true,
+  "metrics": {
+    "ld_h": {
+      "limit": 0.01,
+      "passed": true,
+      "reference_value": 0.0009623028483172896,
+      "relative_change": 0.0006662645615518856,
+      "target_value": 0.000962944424061786
+    },
+    "lq_h": {
+      "limit": 0.01,
+      "passed": true,
+      "reference_value": 0.0009394465401907162,
+      "relative_change": 0.0008819989824304464,
+      "target_value": 0.0009402758625446845
+    },
+    "psi_d0_wb": {
+      "limit": 0.01,
+      "passed": true,
+      "reference_value": 0.03201805850103504,
+      "relative_change": 5.050476873958152e-05,
+      "target_value": 0.03201967564734873
+    },
+    "torque_slope_nm_per_a": {
+      "limit": 0.01,
+      "passed": true,
+      "reference_value": 0.48253369712003724,
+      "relative_change": 0.00019411285080793281,
+      "target_value": 0.48262738129689875
+    }
+  },
+  "reference_mesh": "medium",
+  "rotor_angle_deg": 0.0,
+  "schema_version": 1,
+  "target_mesh": "fine"
+}

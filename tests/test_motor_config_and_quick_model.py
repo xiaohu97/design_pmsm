@@ -115,7 +115,7 @@ class SharedPhysicalConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(
             fingerprint,
-            "cae1e23d408cbddc550a4c5cca0629572ad61aa277933f937a2d2c386ade03e0",
+            "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
         )
 
     def test_geometry_change_invalidates_electromagnetic_parameters(self) -> None:
@@ -166,7 +166,7 @@ class QuickModelPhysicsTests(unittest.TestCase):
             * self.config.electromagnetic.phase_resistance_20c_ohm
             * 5.0**2
         )
-        self.assertAlmostEqual(float(torque), 2.4011183685, places=9)
+        self.assertAlmostEqual(float(torque), 2.4014226193, places=9)
         self.assertAlmostEqual(copper_loss_20c, 8.25, places=12)
 
         point = quick.evaluate_operating_point(self.config, 0.0, float(torque))
@@ -295,9 +295,14 @@ class FemmConfigurationMappingTests(unittest.TestCase):
         self.assertAlmostEqual(machine.mag_thickness_mm, source.magnet_thickness_m * 1000.0)
         self.assertAlmostEqual(machine.airgap_mm, source.airgap_m * 1000.0)
         self.assertAlmostEqual(machine.r_stator_inner_mm, 32.0)
-        self.assertAlmostEqual(machine.r_stator_outer_mm, 60.0)
+        self.assertAlmostEqual(machine.r_stator_outer_mm, 45.0)
         self.assertAlmostEqual(machine.r_air_outer_mm, 70.0)
         self.assertAlmostEqual(machine.r_slot_outer_mm, 40.0)
+        self.assertAlmostEqual(machine.r_rotor_mm - machine.r_shaft_mm, 5.0)
+        self.assertAlmostEqual(
+            machine.r_stator_outer_mm - machine.r_slot_outer_mm,
+            5.0,
+        )
         self.assertEqual(machine.steel_material_name, self.config.materials.steel_library_name)
         self.assertEqual(machine.copper_material_name, self.config.materials.copper_library_name)
 

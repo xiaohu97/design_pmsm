@@ -7,6 +7,7 @@ Outputs supported (selected via ``--analysis``):
   cogging      zero-current cogging-torque curve
   inductance   centered-incremental Ld / Lq versus rotor position
   validate     dq alignment, torque, and incremental-inductance acceptance
+  meshcheck    one-angle electromagnetic check for global-mesh sensitivity
   convergence  isolated gap-mesh, rotor-angle, and torque-integral convergence
   emap         efficiency map (speed by current sweep)
   tncurve      torque-speed envelope
@@ -18,11 +19,13 @@ import argparse
 import csv
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
 import re
+import sys
 import tempfile
 import uuid
 import multiprocessing
@@ -37,9 +40,11 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from motor_config import (
     ConfigError,
     MotorConfig as SharedMotorConfig,
+    canonical_config_sha256,
     config_to_dict,
     default_config_path,
     load_motor_config,
+    physical_model_fingerprint,
 )
 
 try:
@@ -83,11 +88,11 @@ class Machine:
     pole_pairs: int = 10 
     slots: int = 18 
     stack_length_mm: float = 80.0 
-    r_shaft_mm: float = 20.0 
+    r_shaft_mm: float = 25.0  # Legacy name: Air-filled bore radius.
     r_rotor_mm: float = 30.0 
     mag_thickness_mm: float = 1.5 
     airgap_mm: float = 0.5 
-    r_stator_outer_mm: float = 60.0 
+    r_stator_outer_mm: float = 45.0
     r_air_outer_mm: float = 70.0 
     magnet_arc_ratio: float = 0.85 
     turns_per_slot: int = 25 
@@ -874,11 +879,14 @@ def run_electromagnetic_samples(
     num_steps: int,
     span_mechanical_deg: float | None = None,
     progress_label: str = "Electromagnetic validation",
+    minimum_steps: int = 3,
 ) -> list[ElectromagneticSample]:
     if iq_test_a <= 0.0 or delta_current_a <= 0.0:
         raise ValueError("iq_test_a and delta_current_a must be positive.")
-    if num_steps < 3:
-        raise ValueError("num_steps must be at least 3.")
+    if minimum_steps < 1:
+        raise ValueError("minimum_steps must be positive.")
+    if num_steps < minimum_steps:
+        raise ValueError(f"num_steps must be at least {minimum_steps}.")
     if span_mechanical_deg is None:
         span_mechanical_deg = 360.0 / machine.pole_pairs
     if span_mechanical_deg <= 0.0:
@@ -1070,6 +1078,26 @@ def save_electromagnetic_acceptance(
                 metric["limit"],
                 metric["passed"],
             ))
+    json_metrics = {}
+    for name, metric in metrics.items():
+        limit = float(metric["limit"])
+        json_metrics[name] = {
+            "value": float(metric["value"]),
+            "criterion": str(metric["criterion"]),
+            "limit": limit if math.isfinite(limit) else None,
+            "passed": bool(metric["passed"]),
+        }
+    (out_dir / "electromagnetic_acceptance_metrics.json").write_text(
+        json.dumps(
+            {"schema_version": 1, "metrics": json_metrics},
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def run_electromagnetic_acceptance(
@@ -1096,6 +1124,129 @@ def run_electromagnetic_acceptance(
             status = "PASS" if metric["passed"] else "FAIL"
             print(f"  {status:4s} {name}: {float(metric['value']):.6g}")
     return metrics
+
+
+def run_electromagnetic_mesh_check(
+    machine: Machine,
+    out_dir: Path,
+    *,
+    iq_test_a: float = 1.0,
+    delta_current_a: float = 1.0,
+    mesh: MeshConfig | None = None,
+) -> dict[str, float | str]:
+    """Evaluate one rotor angle for medium/fine global-mesh comparison."""
+    mesh = MeshConfig() if mesh is None else mesh
+    sample = run_electromagnetic_samples(
+        machine,
+        mesh,
+        iq_test_a=iq_test_a,
+        delta_current_a=delta_current_a,
+        num_steps=1,
+        minimum_steps=1,
+        progress_label=f"Global mesh check ({mesh.name})",
+    )[0]
+    loaded_pos = sample.torque_q_pos_nm - sample.cogging_torque_nm
+    loaded_neg = sample.torque_q_neg_nm - sample.cogging_torque_nm
+    symmetry_scale = max(0.5 * (abs(loaded_pos) + abs(loaded_neg)), 1e-12)
+    torque_slope = (
+        sample.torque_q_pos_nm - sample.torque_q_neg_nm
+    ) / (2.0 * iq_test_a)
+    expected_slope = 1.5 * machine.pole_pairs * sample.psi_d0_wb
+    report: dict[str, float | str] = {
+        "mesh_level": mesh.name,
+        "rotor_angle_deg": sample.rotor_angle_deg,
+        "theta_e_deg": sample.theta_e_deg,
+        "iq_test_peak_a": iq_test_a,
+        "delta_current_peak_a": delta_current_a,
+        "psi_d0_wb": sample.psi_d0_wb,
+        "psi_q0_wb": sample.psi_q0_wb,
+        "psi_q0_abs_over_psi_d0": abs(sample.psi_q0_wb)
+        / max(abs(sample.psi_d0_wb), 1e-12),
+        "cogging_torque_nm": sample.cogging_torque_nm,
+        "loaded_torque_pos_nm": loaded_pos,
+        "loaded_torque_neg_nm": loaded_neg,
+        "torque_symmetry_error": abs(loaded_pos + loaded_neg) / symmetry_scale,
+        "torque_slope_nm_per_a": torque_slope,
+        "expected_torque_slope_nm_per_a": expected_slope,
+        "torque_slope_relative_error": abs(torque_slope - expected_slope)
+        / max(abs(expected_slope), 1e-12),
+        "ld_h": sample.ld_h,
+        "lq_h": sample.lq_h,
+        "ld_lq_saliency_ratio": abs(sample.ld_h - sample.lq_h)
+        / max(0.5 * (abs(sample.ld_h) + abs(sample.lq_h)), 1e-12),
+    }
+    path = out_dir / f"electromagnetic_mesh_check_{mesh.name}.json"
+    path.write_text(
+        json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"  mesh check written to: {path}")
+    return report
+
+
+def compare_electromagnetic_mesh_checks(
+    reference: dict[str, float | str],
+    target: dict[str, float | str],
+    out_dir: Path,
+    *,
+    max_relative_change: float = 0.01,
+) -> dict[str, object]:
+    """Compare two one-angle mesh reports and write explicit pass/fail metrics."""
+    if max_relative_change <= 0.0:
+        raise ValueError("max_relative_change must be positive.")
+    reference_name = str(reference["mesh_level"])
+    target_name = str(target["mesh_level"])
+    if reference_name == target_name:
+        raise ValueError("Mesh-check reference and target levels must differ.")
+    for name in (
+        "rotor_angle_deg",
+        "iq_test_peak_a",
+        "delta_current_peak_a",
+    ):
+        if not math.isclose(
+            float(reference[name]),
+            float(target[name]),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(f"Mesh-check operating points differ in {name}.")
+    metric_names = (
+        "psi_d0_wb",
+        "torque_slope_nm_per_a",
+        "ld_h",
+        "lq_h",
+    )
+    metrics: dict[str, dict[str, float | bool]] = {}
+    for name in metric_names:
+        reference_value = float(reference[name])
+        target_value = float(target[name])
+        relative_change = abs(target_value - reference_value) / max(
+            abs(target_value), 1e-12
+        )
+        metrics[name] = {
+            "reference_value": reference_value,
+            "target_value": target_value,
+            "relative_change": relative_change,
+            "limit": max_relative_change,
+            "passed": relative_change <= max_relative_change,
+        }
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "reference_mesh": reference_name,
+        "target_mesh": target_name,
+        "rotor_angle_deg": float(reference["rotor_angle_deg"]),
+        "metrics": metrics,
+        "all_passed": all(bool(metric["passed"]) for metric in metrics.values()),
+    }
+    path = out_dir / (
+        f"electromagnetic_mesh_comparison_{reference_name}_vs_{target_name}.json"
+    )
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"  mesh comparison written to: {path}")
+    return payload
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -2234,7 +2385,7 @@ def plot_torque_speed_curve(
 
 ALL_ANALYSES = {
     "basic", "field", "airgap", "cogging", "inductance", "validate",
-    "convergence", "emap", "tncurve",
+    "meshcheck", "convergence", "emap", "tncurve",
 }
 
 
@@ -2246,7 +2397,7 @@ def parse_args():
     p.add_argument("--analysis", nargs="+", default=["basic"],
                    help=(
                        "Options: basic, field, airgap, cogging, inductance, validate, "
-                       "convergence, emap, tncurve, all."
+                       "meshcheck, convergence, emap, tncurve, all."
                    ))
     p.add_argument(
         "--config",
@@ -2303,6 +2454,18 @@ def parse_args():
     p.add_argument("--validation-iq", type=float, default=5.0)
     p.add_argument("--validation-delta-current", type=float, default=1.0)
     p.add_argument("--validation-steps", type=int, default=12)
+    p.add_argument(
+        "--mesh-check-reference-level",
+        choices=[mesh.name for mesh in MESH_LEVELS],
+        default="medium",
+        help="Baseline global mesh used by the one-angle mesh comparison.",
+    )
+    p.add_argument(
+        "--mesh-check-level",
+        choices=[mesh.name for mesh in MESH_LEVELS],
+        default="fine",
+        help="Target global mesh used by the one-angle mesh comparison.",
+    )
     p.add_argument("--convergence-iq", type=float, default=5.0)
     p.add_argument("--convergence-mesh-points", type=int, default=8)
     p.add_argument("--convergence-angle-points", nargs="+", default=["6,12,24"])
@@ -2325,12 +2488,15 @@ def write_resolved_femm_config(
     drive: Drive,
 ) -> Path:
     shared_dict = config_to_dict(config)
-    canonical = json.dumps(
-        shared_dict, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    physical_hash = physical_model_fingerprint(
+        config.machine,
+        config.materials,
+        config.conventions,
+    )
     payload = {
         "source_path": str(source_path.resolve()),
-        "shared_config_sha256": hashlib.sha256(canonical).hexdigest(),
+        "shared_config_sha256": canonical_config_sha256(config),
+        "physical_model_sha256": physical_hash,
         "shared_config": shared_dict,
         "resolved_femm_machine": asdict(machine),
         "resolved_femm_loss_thermal": asdict(loss),
@@ -2342,6 +2508,111 @@ def write_resolved_femm_config(
         encoding="utf-8",
     )
     return path
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _snapshot_output_files(out_dir: Path) -> dict[str, tuple[int, int]]:
+    snapshot: dict[str, tuple[int, int]] = {}
+    for path in out_dir.rglob("*"):
+        if not path.is_file() or path.name == "femm_run_manifest.json":
+            continue
+        stat = path.stat()
+        snapshot[path.relative_to(out_dir).as_posix()] = (
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+    return snapshot
+
+
+def _jsonable_arg(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return [_jsonable_arg(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _jsonable_arg(item) for key, item in value.items()}
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def write_femm_run_manifest(
+    out_dir: Path,
+    *,
+    before: dict[str, tuple[int, int]],
+    started_at_utc: str,
+    analyses: set[str],
+    args: argparse.Namespace,
+    config: SharedMotorConfig,
+) -> Path:
+    """Append provenance for files created or replaced by one successful run."""
+    changed_files = []
+    for path in sorted(out_dir.rglob("*"), key=lambda item: item.as_posix()):
+        if not path.is_file() or path.name == "femm_run_manifest.json":
+            continue
+        relative = path.relative_to(out_dir).as_posix()
+        stat = path.stat()
+        state = (stat.st_mtime_ns, stat.st_size)
+        if before.get(relative) == state:
+            continue
+        changed_files.append(
+            {
+                "path": relative,
+                "sha256": _file_sha256(path),
+                "size_bytes": stat.st_size,
+            }
+        )
+    if not changed_files:
+        raise RuntimeError("Successful FEMM run did not create or replace any output files.")
+
+    manifest_path = out_dir / "femm_run_manifest.json"
+    if manifest_path.is_file():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Invalid FEMM run manifest {manifest_path}: {exc}") from exc
+        if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+            raise RuntimeError(f"Unsupported FEMM run manifest: {manifest_path}")
+        runs = payload.get("runs")
+        if not isinstance(runs, list):
+            raise RuntimeError(f"Invalid FEMM run list in {manifest_path}")
+    else:
+        payload = {"schema_version": 1, "runs": []}
+        runs = payload["runs"]
+
+    runs.append(
+        {
+            "started_at_utc": started_at_utc,
+            "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+            "analyses": sorted(analyses),
+            "arguments": {
+                key: _jsonable_arg(value)
+                for key, value in sorted(vars(args).items())
+            },
+            "command": [str(item) for item in sys.argv],
+            "shared_config_sha256": canonical_config_sha256(config),
+            "physical_model_sha256": physical_model_fingerprint(
+                config.machine,
+                config.materials,
+                config.conventions,
+            ),
+            "files": changed_files,
+        }
+    )
+    temporary = manifest_path.with_name(".femm_run_manifest.tmp.json")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(manifest_path)
+    return manifest_path
 
 
 def main():
@@ -2383,6 +2654,12 @@ def main():
         raise SystemExit("--points must be at least 3.")
     cfg = SweepCfg(points_per_electrical_cycle=args.points)
     mesh = mesh_config_by_name(args.mesh_level)
+    mesh_check_reference = mesh_config_by_name(args.mesh_check_reference_level)
+    mesh_check_target = mesh_config_by_name(args.mesh_check_level)
+    if "meshcheck" in analyses and mesh_check_reference.name == mesh_check_target.name:
+        raise SystemExit(
+            "--mesh-check-reference-level and --mesh-check-level must differ."
+        )
     convergence_angle_points = tuple(
         int(value) for value in parse_list(args.convergence_angle_points)
     )
@@ -2394,6 +2671,8 @@ def main():
         raise SystemExit("--airgap-points must be at least 36.")
 
     args.out.mkdir(parents=True, exist_ok=True)
+    files_before_run = _snapshot_output_files(args.out)
+    run_started_at_utc = datetime.now(timezone.utc).isoformat()
     resolved_path = write_resolved_femm_config(
         args.out, args.config, shared_config, machine, loss, drive
     )
@@ -2409,7 +2688,7 @@ def main():
     requested_currents: list[float] = []
     if analyses & {"basic", "field", "airgap"}:
         requested_currents.extend(abs(value) for value in iq_list)
-    if "validate" in analyses:
+    if analyses & {"validate", "meshcheck"}:
         requested_currents.extend(
             (abs(args.validation_iq), abs(args.validation_delta_current))
         )
@@ -2519,7 +2798,9 @@ def main():
                 print("\nBasic summary written to:", args.out / "femm_summary.csv")
 
         # Fallback to main FEMM instance for remaining sequential parts
-        sequential_analyses = {"cogging", "inductance", "validate", "convergence"}
+        sequential_analyses = {
+            "cogging", "inductance", "validate", "meshcheck", "convergence"
+        }
         needs_main_femm = bool(analyses & sequential_analyses) or (
             args.workers == 1 and "emap" in analyses
         )
@@ -2548,6 +2829,33 @@ def main():
                 delta_current_a=args.validation_delta_current,
                 num_steps=args.validation_steps,
                 mesh=mesh,
+            )
+
+        if "meshcheck" in analyses:
+            print("\n── Global mesh sensitivity check ──")
+            reference_report = run_electromagnetic_mesh_check(
+                machine,
+                args.out,
+                iq_test_a=args.validation_iq,
+                delta_current_a=args.validation_delta_current,
+                mesh=mesh_check_reference,
+            )
+            target_report = run_electromagnetic_mesh_check(
+                machine,
+                args.out,
+                iq_test_a=args.validation_iq,
+                delta_current_a=args.validation_delta_current,
+                mesh=mesh_check_target,
+            )
+            comparison = compare_electromagnetic_mesh_checks(
+                reference_report,
+                target_report,
+                args.out,
+            )
+            status = "PASS" if comparison["all_passed"] else "FAIL"
+            print(
+                f"  {status} {mesh_check_reference.name}/"
+                f"{mesh_check_target.name} global-mesh comparison"
             )
 
         if "convergence" in analyses:
@@ -2586,6 +2894,16 @@ def main():
             femm.closefemm()
         except Exception:
             pass
+
+    manifest_path = write_femm_run_manifest(
+        args.out,
+        before=files_before_run,
+        started_at_utc=run_started_at_utc,
+        analyses=analyses,
+        args=args,
+        config=shared_config,
+    )
+    print(f"Run manifest: {manifest_path}")
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

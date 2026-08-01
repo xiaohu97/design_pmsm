@@ -1,0 +1,179 @@
+{
+  "runs": [
+    {
+      "analyses": [
+        "meshcheck"
+      ],
+      "arguments": {
+        "airgap_points": 360,
+        "analysis": [
+          "meshcheck"
+        ],
+        "cogging_steps": 72,
+        "config": "motor_config.json",
+        "convergence_angle_points": [
+          "6,12,24"
+        ],
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 8,
+        "emap_iq": [
+          "2.5,5,10,15"
+        ],
+        "emap_pts": 12,
+        "emap_rpm": [
+          "300,600,900,1200"
+        ],
+        "field_angular_points": 180,
+        "field_radial_points": 48,
+        "ind_current": 1.0,
+        "ind_steps": 37,
+        "iq_list": [
+          "5",
+          "10",
+          "15"
+        ],
+        "mesh_level": "fine",
+        "out": "output_geometry_acceptance_fine",
+        "points": 72,
+        "rpm_list": [
+          "300",
+          "600",
+          "900"
+        ],
+        "show": false,
+        "show_femm": false,
+        "snapshot_angle_deg": 0.0,
+        "validation_delta_current": 1.0,
+        "validation_iq": 1.0,
+        "validation_steps": 12,
+        "workers": 1
+      },
+      "command": [
+        "femm_spm_template.py",
+        "--config",
+        "motor_config.json",
+        "--analysis",
+        "meshcheck",
+        "--mesh-level",
+        "fine",
+        "--validation-iq",
+        "1",
+        "--validation-delta-current",
+        "1",
+        "--out",
+        "output_geometry_acceptance_fine"
+      ],
+      "completed_at_utc": "2026-08-01T05:29:23.145384+00:00",
+      "files": [
+        {
+          "path": "electromagnetic_mesh_check_fine.json",
+          "sha256": "ae1e143eb1847df99b47713436c1e8dd6cd977dd03683b5f6aeabeef5ac0057c",
+          "size_bytes": 755
+        },
+        {
+          "path": "resolved_femm_config.json",
+          "sha256": "8fc683770d0e76d9e0efe4e9664db9e16e74cb42155f470f255ed45800eb40ab",
+          "size_bytes": 3960
+        }
+      ],
+      "physical_model_sha256": "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
+      "shared_config_sha256": "6ee52a93a21cba84eab64afe554c974ac5f703d6bd85c48a844623ce10441438",
+      "started_at_utc": "2026-08-01T05:07:27.092942+00:00"
+    },
+    {
+      "analyses": [
+        "meshcheck"
+      ],
+      "arguments": {
+        "airgap_points": 360,
+        "analysis": [
+          "meshcheck"
+        ],
+        "cogging_steps": 72,
+        "config": "motor_config.json",
+        "convergence_angle_points": [
+          "6,12,24"
+        ],
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 8,
+        "emap_iq": [
+          "2.5,5,10,15"
+        ],
+        "emap_pts": 12,
+        "emap_rpm": [
+          "300,600,900,1200"
+        ],
+        "field_angular_points": 180,
+        "field_radial_points": 48,
+        "ind_current": 1.0,
+        "ind_steps": 37,
+        "iq_list": [
+          "5",
+          "10",
+          "15"
+        ],
+        "mesh_check_level": "fine",
+        "mesh_check_reference_level": "medium",
+        "mesh_level": "medium",
+        "out": "output_femm_meshcheck",
+        "points": 72,
+        "rpm_list": [
+          "300",
+          "600",
+          "900"
+        ],
+        "show": false,
+        "show_femm": false,
+        "snapshot_angle_deg": 0.0,
+        "validation_delta_current": 1.0,
+        "validation_iq": 1.0,
+        "validation_steps": 12,
+        "workers": 1
+      },
+      "command": [
+        "femm_spm_template.py",
+        "--config",
+        "motor_config.json",
+        "--analysis",
+        "meshcheck",
+        "--mesh-check-reference-level",
+        "medium",
+        "--mesh-check-level",
+        "fine",
+        "--validation-iq",
+        "1",
+        "--validation-delta-current",
+        "1",
+        "--out",
+        "output_femm_meshcheck"
+      ],
+      "completed_at_utc": "2026-08-01T09:21:04.383989+00:00",
+      "files": [
+        {
+          "path": "electromagnetic_mesh_check_fine.json",
+          "sha256": "ae1e143eb1847df99b47713436c1e8dd6cd977dd03683b5f6aeabeef5ac0057c",
+          "size_bytes": 755
+        },
+        {
+          "path": "electromagnetic_mesh_check_medium.json",
+          "sha256": "095467088d93bb191ad6f0289eba7dd2f6c1b9fdb61970332a2186c67e54d521",
+          "size_bytes": 756
+        },
+        {
+          "path": "electromagnetic_mesh_comparison_medium_vs_fine.json",
+          "sha256": "6185064e5eb9e62bd86bd5ee4f8ffba38532edeedb7f31d7823e1832f7cc3fa5",
+          "size_bytes": 1015
+        },
+        {
+          "path": "resolved_femm_config.json",
+          "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79",
+          "size_bytes": 3973
+        }
+      ],
+      "physical_model_sha256": "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
+      "shared_config_sha256": "ee3dce34cfe2c3d3b48ac548e301e3ed6955d7bdf82bb3b16e0177b663045a83",
+      "started_at_utc": "2026-08-01T08:45:14.656075+00:00"
+    }
+  ],
+  "schema_version": 1
+}

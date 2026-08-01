@@ -1,3 +1,4 @@
+import json
 import math
 import os
 from pathlib import Path
@@ -289,6 +290,80 @@ class AcceptanceMathTests(unittest.TestCase):
         self.assertAlmostEqual(summary["loaded_ripple_pp_nm"], 0.0, places=12)
         self.assertAlmostEqual(summary["cogging_mean_nm"], 0.0, places=12)
         self.assertAlmostEqual(summary["cogging_pp_nm"], 0.04, places=12)
+
+    def test_acceptance_json_is_strict_and_uses_null_for_report_limits(self):
+        machine = motor.Machine()
+        sample = motor.ElectromagneticSample(
+            rotor_angle_deg=0.0,
+            theta_e_deg=-100.0,
+            psi_d0_wb=0.032,
+            psi_q0_wb=0.0,
+            cogging_torque_nm=0.0,
+            torque_q_pos_nm=0.48,
+            torque_q_neg_nm=-0.48,
+            ld_h=0.001,
+            lq_h=0.001,
+        )
+        samples = [sample, sample, sample]
+        metrics = motor.evaluate_electromagnetic_acceptance(
+            machine, samples, iq_test_a=1.0
+        )
+        with TemporaryDirectory() as temporary:
+            out_dir = Path(temporary)
+            motor.save_electromagnetic_acceptance(samples, metrics, out_dir)
+            path = out_dir / "electromagnetic_acceptance_metrics.json"
+            raw = path.read_text(encoding="utf-8")
+            self.assertNotIn("NaN", raw)
+            payload = json.loads(
+                raw,
+                parse_constant=lambda value: self.fail(
+                    f"non-standard JSON constant: {value}"
+                ),
+            )
+            self.assertEqual(payload["schema_version"], 1)
+            self.assertIsNone(
+                payload["metrics"]["psi_pm_wb"]["limit"]
+            )
+
+    def test_mesh_check_compares_medium_and_fine_reports(self):
+        reference = {
+            "mesh_level": "medium",
+            "rotor_angle_deg": 0.0,
+            "iq_test_peak_a": 1.0,
+            "delta_current_peak_a": 1.0,
+            "psi_d0_wb": 0.03200,
+            "torque_slope_nm_per_a": 0.4800,
+            "ld_h": 0.001000,
+            "lq_h": 0.000980,
+        }
+        target = dict(reference)
+        target.update(
+            {
+                "mesh_level": "fine",
+                "psi_d0_wb": 0.03201,
+                "torque_slope_nm_per_a": 0.4801,
+                "ld_h": 0.001001,
+                "lq_h": 0.000981,
+            }
+        )
+        with TemporaryDirectory() as temporary:
+            out_dir = Path(temporary)
+            result = motor.compare_electromagnetic_mesh_checks(
+                reference, target, out_dir
+            )
+            self.assertTrue(result["all_passed"])
+            self.assertTrue(
+                out_dir.joinpath(
+                    "electromagnetic_mesh_comparison_medium_vs_fine.json"
+                ).is_file()
+            )
+
+            target["lq_h"] = 0.0008
+            failed = motor.compare_electromagnetic_mesh_checks(
+                reference, target, out_dir
+            )
+            self.assertFalse(failed["all_passed"])
+            self.assertFalse(failed["metrics"]["lq_h"]["passed"])
 
 
 if __name__ == "__main__":

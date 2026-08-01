@@ -1,0 +1,219 @@
+{
+  "runs": [
+    {
+      "analyses": [
+        "validate"
+      ],
+      "arguments": {
+        "airgap_points": 360,
+        "analysis": [
+          "validate"
+        ],
+        "cogging_steps": 72,
+        "config": "motor_config.json",
+        "convergence_angle_points": [
+          "6,12,24"
+        ],
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 8,
+        "emap_iq": [
+          "2.5,5,10,15"
+        ],
+        "emap_pts": 12,
+        "emap_rpm": [
+          "300,600,900,1200"
+        ],
+        "field_angular_points": 180,
+        "field_radial_points": 48,
+        "ind_current": 1.0,
+        "ind_steps": 37,
+        "iq_list": [
+          "5",
+          "10",
+          "15"
+        ],
+        "mesh_level": "medium",
+        "out": "output_femm_fix_smoke",
+        "points": 72,
+        "rpm_list": [
+          "300",
+          "600",
+          "900"
+        ],
+        "show": false,
+        "show_femm": false,
+        "snapshot_angle_deg": 0.0,
+        "validation_delta_current": 1.0,
+        "validation_iq": 1.0,
+        "validation_steps": 3,
+        "workers": 1
+      },
+      "command": [
+        "femm_spm_template.py",
+        "--config",
+        "motor_config.json",
+        "--analysis",
+        "validate",
+        "--mesh-level",
+        "medium",
+        "--validation-iq",
+        "1",
+        "--validation-delta-current",
+        "1",
+        "--validation-steps",
+        "3",
+        "--out",
+        "output_femm_fix_smoke"
+      ],
+      "completed_at_utc": "2026-08-01T05:49:52.233812+00:00",
+      "files": [
+        {
+          "path": "electromagnetic_acceptance.csv",
+          "sha256": "6b4edf5538cf21abdc350e048084e3ddf2802b2808346f1969260dda090f5cf5",
+          "size_bytes": 762
+        },
+        {
+          "path": "electromagnetic_acceptance_metrics.json",
+          "sha256": "627b761a10544af1c2c70a3754e5787038633b42aef2fdc3df25151d6ae0969d",
+          "size_bytes": 1965
+        },
+        {
+          "path": "electromagnetic_validation_samples.csv",
+          "sha256": "8f38e7c1469cc7b9f4667062e6b1d1ba3bada2fd5e7be96b76365f78f828d12b",
+          "size_bytes": 795
+        },
+        {
+          "path": "resolved_femm_config.json",
+          "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79",
+          "size_bytes": 3973
+        }
+      ],
+      "physical_model_sha256": "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
+      "shared_config_sha256": "ee3dce34cfe2c3d3b48ac548e301e3ed6955d7bdf82bb3b16e0177b663045a83",
+      "started_at_utc": "2026-08-01T05:30:28.654916+00:00"
+    },
+    {
+      "analyses": [
+        "convergence"
+      ],
+      "arguments": {
+        "airgap_points": 360,
+        "analysis": [
+          "convergence"
+        ],
+        "cogging_steps": 72,
+        "config": "motor_config.json",
+        "convergence_angle_points": [
+          "3,6"
+        ],
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 3,
+        "emap_iq": [
+          "2.5,5,10,15"
+        ],
+        "emap_pts": 12,
+        "emap_rpm": [
+          "300,600,900,1200"
+        ],
+        "field_angular_points": 180,
+        "field_radial_points": 48,
+        "ind_current": 1.0,
+        "ind_steps": 37,
+        "iq_list": [
+          "5",
+          "10",
+          "15"
+        ],
+        "mesh_level": "medium",
+        "out": "output_femm_fix_smoke",
+        "points": 72,
+        "rpm_list": [
+          "300",
+          "600",
+          "900"
+        ],
+        "show": false,
+        "show_femm": false,
+        "snapshot_angle_deg": 0.0,
+        "validation_delta_current": 1.0,
+        "validation_iq": 5.0,
+        "validation_steps": 12,
+        "workers": 1
+      },
+      "command": [
+        "femm_spm_template.py",
+        "--config",
+        "motor_config.json",
+        "--analysis",
+        "convergence",
+        "--mesh-level",
+        "medium",
+        "--convergence-iq",
+        "5",
+        "--convergence-mesh-points",
+        "3",
+        "--convergence-angle-points",
+        "3,6",
+        "--out",
+        "output_femm_fix_smoke"
+      ],
+      "completed_at_utc": "2026-08-01T08:44:13.664606+00:00",
+      "files": [
+        {
+          "path": ".convergence_cache/torque_gap12_n3_39108561f656c60f.csv",
+          "sha256": "bfc54130bad5f9ecbfdc7b5f3ab49c3ca0fc5c125b549d8af1a9ae312c123980",
+          "size_bytes": 287
+        },
+        {
+          "path": ".convergence_cache/torque_gap3_n3_53becc2208e8471f.csv",
+          "sha256": "6ea70bce5db7d2dab8985091731d44bd580001f99cde8bcbce7266bee664186e",
+          "size_bytes": 287
+        },
+        {
+          "path": ".convergence_cache/torque_gap5_n3_724331de72f37dc5.csv",
+          "sha256": "3f85b2c2fe77b37978cd6b00be89de985593edb6da419b6617f9f92ee9151a84",
+          "size_bytes": 287
+        },
+        {
+          "path": ".convergence_cache/torque_gap8_n3_aa3bb3a2d71bcb28.csv",
+          "sha256": "4d5ab4d7210e88da759204d6077aa144626b2fd4d441b6ef3475d9cae5041374",
+          "size_bytes": 288
+        },
+        {
+          "path": ".convergence_cache/torque_gap8_n6_307001aca7d2592e.csv",
+          "sha256": "e1173c2dcc26846b6d447bf5ca35f38cfde2f5c02c989af55313eb687e99240c",
+          "size_bytes": 517
+        },
+        {
+          "path": "resolved_femm_config.json",
+          "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79",
+          "size_bytes": 3973
+        },
+        {
+          "path": "torque_convergence_acceptance.csv",
+          "sha256": "be329e9596e107e4a1211f595ab533687d0f2ea870440d1116fa8c5ad991fab9",
+          "size_bytes": 638
+        },
+        {
+          "path": "torque_convergence_samples.csv",
+          "sha256": "f81138b98fdf5bfcb5d58cf87faf48cd4ccf5ab806ec65bca6deed69b0916f49",
+          "size_bytes": 1456
+        },
+        {
+          "path": "torque_convergence_summary.csv",
+          "sha256": "649f7dbe0a237c426e683fe09ffb79198546295e798abd30f4d95160853e33f7",
+          "size_bytes": 948
+        },
+        {
+          "path": "torque_integral_convergence.csv",
+          "sha256": "06dbe639ce2e56cdd01139a5a2f51eea062ad219dd1c8cad9066c8463f46742e",
+          "size_bytes": 1014
+        }
+      ],
+      "physical_model_sha256": "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
+      "shared_config_sha256": "ee3dce34cfe2c3d3b48ac548e301e3ed6955d7bdf82bb3b16e0177b663045a83",
+      "started_at_utc": "2026-08-01T05:55:13.386746+00:00"
+    }
+  ],
+  "schema_version": 1
+}

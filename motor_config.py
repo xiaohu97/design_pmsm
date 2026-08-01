@@ -47,11 +47,11 @@ class MachineConfig:
     pole_pairs: int = 10
     slots: int = 18
     stack_length_m: float = 0.080
-    shaft_radius_m: float = 0.020
+    shaft_radius_m: float = 0.025  # Legacy name: Air-filled bore radius in FEMM.
     rotor_radius_m: float = 0.030
     magnet_thickness_m: float = 0.0015
     airgap_m: float = 0.0005
-    stator_outer_radius_m: float = 0.060
+    stator_outer_radius_m: float = 0.045
     outer_air_radius_m: float = 0.070
     magnet_arc_ratio: float = 0.85
     turns_per_slot: int = 25
@@ -134,12 +134,15 @@ class MachineConfig:
 class ElectromagneticConfig:
     phase_resistance_20c_ohm: float = 0.220
     copper_temp_coeff_per_k: float = 0.00393
-    ld_h: float = 0.0009660890764148228
-    lq_h: float = 0.0009420675310741955
-    psi_pm_wb: float = 0.03201491158003713
+    ld_h: float = 0.0009625181271786203
+    lq_h: float = 0.0009395321366422422
+    psi_pm_wb: float = 0.03201896825785145
     validated_current_peak_a: float = 5.0
-    parameter_source: str = "FEMM electromagnetic acceptance, medium mesh"
-    source_physical_model_sha256: str = "cae1e23d408cbddc550a4c5cca0629572ad61aa277933f937a2d2c386ade03e0"
+    parameter_source: str = (
+        "FEMM acceptance, medium mesh (3 angles), "
+        "fine global-mesh cross-check at 0 deg"
+    )
+    source_physical_model_sha256: str = "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09"
 
     def validate(self) -> None:
         positive = {

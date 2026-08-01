@@ -1,0 +1,114 @@
+{
+  "runs": [
+    {
+      "analyses": [
+        "airgap",
+        "field"
+      ],
+      "arguments": {
+        "airgap_points": 360,
+        "analysis": [
+          "field",
+          "airgap"
+        ],
+        "cogging_steps": 72,
+        "config": "motor_config.json",
+        "convergence_angle_points": [
+          "6,12,24"
+        ],
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 8,
+        "emap_iq": [
+          "2.5,5,10,15"
+        ],
+        "emap_pts": 12,
+        "emap_rpm": [
+          "300,600,900,1200"
+        ],
+        "field_angular_points": 120,
+        "field_radial_points": 24,
+        "ind_current": 1.0,
+        "ind_steps": 37,
+        "iq_list": [
+          "5"
+        ],
+        "mesh_level": "medium",
+        "out": "output_readme_femm",
+        "points": 72,
+        "rpm_list": [
+          "600"
+        ],
+        "show": false,
+        "show_femm": false,
+        "snapshot_angle_deg": 0.0,
+        "validation_delta_current": 1.0,
+        "validation_iq": 5.0,
+        "validation_steps": 12,
+        "workers": 1
+      },
+      "command": [
+        "femm_spm_template.py",
+        "--config",
+        "motor_config.json",
+        "--analysis",
+        "field",
+        "airgap",
+        "--rpm-list",
+        "600",
+        "--iq-list",
+        "5",
+        "--snapshot-angle-deg",
+        "0",
+        "--field-radial-points",
+        "24",
+        "--field-angular-points",
+        "120",
+        "--airgap-points",
+        "360",
+        "--mesh-level",
+        "medium",
+        "--workers",
+        "1",
+        "--out",
+        "output_readme_femm"
+      ],
+      "completed_at_utc": "2026-08-01T05:54:24.646490+00:00",
+      "files": [
+        {
+          "path": "airgap_B_rpm600_iq5_a0.csv",
+          "sha256": "1026e8127444f7fb0ec3a8215a9c6baec9109b84bb0bcee25db375664371a2bb",
+          "size_bytes": 27736
+        },
+        {
+          "path": "airgap_B_rpm600_iq5_a0.png",
+          "sha256": "2dafb4ec60a84eec7e056b46d3b58802347f00423a16d918a73456ff738015a7",
+          "size_bytes": 132897
+        },
+        {
+          "path": "field_density_rpm600_iq5_a0.png",
+          "sha256": "443dda96b68898b59e9b98ed9f05bd36e6394eb0f4bdb27dc3fcf5944e24f5fa",
+          "size_bytes": 212796
+        },
+        {
+          "path": "field_lines_rpm600_iq5_a0.png",
+          "sha256": "a6aeb22e63b25106357e407f1d3239faaf644968b3cb72b6c796fabf00b9f4db",
+          "size_bytes": 561489
+        },
+        {
+          "path": "field_snapshot_rpm600_iq5_a0.csv",
+          "sha256": "67e54a8e4abb2a8bcd74ec1fc537693c5c114e99e98960c631724ff9c627534f",
+          "size_bytes": 168
+        },
+        {
+          "path": "resolved_femm_config.json",
+          "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79",
+          "size_bytes": 3973
+        }
+      ],
+      "physical_model_sha256": "ee6cd468ecf59b2f0caab30ceae43d3dd9db539a38ceb9705116b9f9add25f09",
+      "shared_config_sha256": "ee3dce34cfe2c3d3b48ac548e301e3ed6955d7bdf82bb3b16e0177b663045a83",
+      "started_at_utc": "2026-08-01T05:50:21.495930+00:00"
+    }
+  ],
+  "schema_version": 1
+}

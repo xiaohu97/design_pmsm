@@ -77,11 +77,14 @@ from another working directory.
 | Turns | `25` per slot, `75` series turns per phase |
 | Fundamental winding factor | `0.9452136366` |
 | Stack length | `80 mm` |
-| Shaft / rotor radii | `20 / 30 mm` |
+| Nonmagnetic bore / rotor outer radii | `25 / 30 mm` |
+| Rotor-steel radial range / thickness | `25–30 mm / 5 mm` |
 | Magnet thickness / air gap | `1.5 / 0.5 mm` |
-| Stator outer radius | `60 mm` |
-| PM flux linkage `psi_pm` | `0.03201491158 Wb` |
-| Incremental `Ld / Lq` | `0.966089 / 0.942068 mH` |
+| Stator inner / slot outer radii | `32 / 40 mm` |
+| Stator-yoke radial range / thickness | `40–45 mm / 5 mm` |
+| Stator outer / outer-air radii | `45 / 70 mm` |
+| PM flux linkage `psi_pm` | `0.03201896826 Wb` |
+| Incremental `Ld / Lq` | `0.962518 / 0.939532 mH` |
 | Phase resistance at 20 deg C | `0.22 ohm` |
 | DC bus / modulation limit | `48 V / 0.95` |
 | Phase-voltage peak limit | `26.3272 V` |
@@ -91,6 +94,18 @@ from another working directory.
 The winding generated from the actual FEMM slot table is shown below. Each phase
 has three positive and three negative coil sides, balanced fundamental magnitude,
 and 120 electrical-degree separation.
+
+The light-gray ring is stator steel: a continuous tooth-tip bridge occupies
+`32–32.2 mm`, the winding-slot region occupies `32.2–40 mm`, and the `40–45 mm`
+light-gray band outside the coils is the 5 mm stator yoke. The dark-gray
+`25–30 mm` ring is the 5 mm rotor core. The white `0–25 mm` center is modeled as
+a nonmagnetic bore, not steel. The `45–70 mm` exterior solution-air region is
+intentionally omitted from this winding-layout figure.
+
+For compatibility with the original configuration schema, the bore boundary is
+still named `shaft_radius_m`; FEMM assigns `Air` inside it. If 25 mm is intended
+to be a solid steel shaft, add an explicit shaft material model and rerun every
+electromagnetic acceptance and convergence study before using these results.
 
 ![Current 18-slot / 20-pole winding layout](docs/assets/winding_18s20p.png)
 
@@ -120,12 +135,12 @@ and the CSV marks them with `load_extrapolated` and `envelope_extrapolated`.
 
 | Metric | Result | Interpretation |
 |---|---:|---|
-| No-load, `Id=0` voltage base speed | `785.28 rpm` | analytical voltage limit |
+| No-load, `Id=0` voltage base speed | `785.18 rpm` | analytical voltage limit |
 | Grid-estimated constant-torque base speed | `650 rpm` | 25 rpm sweep spacing |
 | Highest feasible `2 N m` sweep point | `1225 rpm` | later points are clipped |
-| Low-speed maximum shaft torque | `7.203 N m` | extrapolated to 15 A |
-| Peak envelope shaft power | `503.68 W` | extrapolated to 15 A |
-| Maximum dq/system power residual | `1.56e-13 W` | numerical closure |
+| Low-speed maximum shaft torque | `7.204 N m` | extrapolated to 15 A |
+| Peak envelope shaft power | `503.71 W` | extrapolated to 15 A |
+| Maximum dq/system power residual | `1.99e-13 W` | numerical closure |
 
 ![Current quick constraint-aware sweep](docs/assets/quick_sweep.png)
 
@@ -142,16 +157,23 @@ slope are evaluated.
 
 | Gate | Measured result | Limit | Status |
 |---|---:|---:|:---:|
-| Positive no-load `psi_d0` | `32.0149 mWb` | `> 0` | PASS |
-| `rms(psi_q0) / psi_d0` | `0.22465%` | `<= 5%` | PASS |
-| `T(+Iq)` versus `-T(-Iq)` error | `0.06196%` | `<= 10%` | PASS |
-| Torque slope | `0.482504 N m/A` versus theory `0.480224 N m/A`; error `0.47479%` | `<= 20%` error | PASS |
-| Incremental `Ld / Lq` difference | `2.5178%` | `<= 20%` | PASS |
-| Loaded torque / cogging torque | `29.92` | `>= 5` | PASS |
+| Positive no-load `psi_d0` | `32.0190 mWb` | `> 0` | PASS |
+| `rms(psi_q0) / psi_d0` | `0.179794%` | `<= 5%` | PASS |
+| `T(+Iq)` versus `-T(-Iq)` error | `0.051590%` | `<= 10%` | PASS |
+| Torque slope | `0.482547 N m/A` versus theory `0.480285 N m/A`; error `0.471050%` | `<= 20%` error | PASS |
+| Incremental `Ld / Lq` difference | `2.416970%` | `<= 20%` | PASS |
+| Loaded torque / cogging torque | `109.76` | `>= 5` | PASS |
 
 The theoretical slope is `1.5 * p * psi_pm`. The plot below shows the actual
 no-load dq alignment, cogging-subtracted positive/negative-current torque, and
 centered incremental inductances.
+
+Because both the rotor core and stator yoke are only 5 mm thick, a direct
+medium/fine global-mesh comparison was run at `0 deg` mechanical angle. Relative
+to the fine mesh, the medium-mesh changes in `psi_d0`, torque slope, `Ld`, and `Lq` were
+`0.0051%`, `0.0194%`, `0.0666%`, and `0.0882%`; the maximum was below `0.1%`.
+This checks global-mesh sensitivity only and does not replace the three-angle
+acceptance run above.
 
 ![Current FEMM electromagnetic acceptance](docs/assets/electromagnetic_acceptance.png)
 
@@ -164,15 +186,15 @@ against FEMM weighted-stress-tensor torque.
 
 | Gate | Measured change or ratio | Limit | Status |
 |---|---:|---:|:---:|
-| Loaded torque, air-gap mesh | `0.01188%` | `<= 2%` | PASS |
-| Loaded torque, angle step | `0.09618%` | `<= 2%` | PASS |
-| Cogging peak-to-peak, mesh | `7.8536%` | `<= 10%` | PASS |
-| Cogging peak-to-peak, angle step | `6.3781%` | `<= 10%` | PASS |
-| Loaded torque / cogging | `75.91` | `>= 5` | PASS |
-| Loaded torque / remesh noise floor | `658.36` | `>= 20` | PASS |
-| Maxwell quadrature change | `0.15081%` | `<= 2%` | PASS |
-| Maxwell radius spread | `0.12310%` | `<= 5%` | PASS |
-| Maxwell versus WST | `0.10909%` | `<= 10%` | PASS |
+| Loaded torque, air-gap mesh | `0.00899%` | `<= 2%` | PASS |
+| Loaded torque, angle step | `0.09441%` | `<= 2%` | PASS |
+| Cogging peak-to-peak, mesh | `4.0559%` | `<= 10%` | PASS |
+| Cogging peak-to-peak, angle step | `2.7917%` | `<= 10%` | PASS |
+| Loaded torque / cogging | `76.59` | `>= 5` | PASS |
+| Loaded torque / remesh noise floor | `398.27` | `>= 20` | PASS |
+| Maxwell quadrature change | `0.19536%` | `<= 2%` | PASS |
+| Maxwell radius spread | `0.24958%` | `<= 5%` | PASS |
+| Maxwell versus WST | `0.13276%` | `<= 10%` | PASS |
 
 Thus loaded torque is clearly larger than both cogging torque and numerical
 remeshing noise in this regression.
@@ -188,8 +210,8 @@ The current README field figures use one explicit medium-mesh operating point:
 | Context speed | `600 rpm` |
 | Mechanical rotor angle | `0 deg` |
 | `Id / Iq` | `0 / 5 A peak` |
-| FEMM torque | `2.412079 N m` |
-| `psi_d / psi_q` | `0.0320233 / 0.00476648 Wb` |
+| FEMM torque | `2.411687 N m` |
+| `psi_d / psi_q` | `0.03202130 / 0.00474991 Wb` |
 | Field-map samples | `24 radial x 120 angular` |
 | Air-gap samples | `360 angular` |
 
@@ -234,6 +256,21 @@ python .\femm_spm_template.py `
   --out .\output_femm_fix_smoke
 ```
 
+Cross-check the 5 mm rotor core and 5 mm stator yoke with a fine global mesh at
+one representative rotor angle:
+
+```powershell
+python .\femm_spm_template.py `
+  --config .\motor_config.json `
+  --analysis meshcheck `
+  --mesh-check-reference-level medium --mesh-check-level fine `
+  --validation-iq 1 --validation-delta-current 1 `
+  --out .\output_femm_meshcheck
+```
+
+`meshcheck` directly compares medium and fine global meshes at one angle; it
+does not replace a `validate` run with at least 3 rotor positions.
+
 Run one full electrical-cycle waveform within the validated current range:
 
 ```powershell
@@ -262,6 +299,7 @@ but does not delete unrelated files from an existing output directory.
 | `cogging` | zero-current torque over one true cogging period (`2 deg`) | `cogging_torque.csv/.png` |
 | `inductance` | centered incremental `Ld/Lq` sweep | `inductance.csv/.png` |
 | `validate` | dq alignment, torque symmetry/slope, `Ld/Lq`, load/cogging gates | electromagnetic acceptance CSVs |
+| `meshcheck` | one-angle medium/fine global-mesh comparison; not full acceptance | `electromagnetic_mesh_*.json` |
 | `convergence` | air-gap mesh, angle step, and Maxwell/WST convergence | torque-convergence CSVs |
 | `emap` | raw imposed-current electromagnetic map | experimental; not shown in README |
 | `tncurve` | comparison based on raw map maxima | experimental; not shown in README |
@@ -272,9 +310,11 @@ Raw FEMM rpm/Iq points impose current directly; they are not filtered by the
 
 ### Runtime and Solve Counts
 
-FEMM runtime is machine dependent. On the current Windows machine, the single
-README snapshot took about `3 min 28 s`, including geometry construction and
-plot sampling. Solve counts are a better planning measure:
+FEMM runtime is machine dependent. On the current Windows machine, the README
+snapshot took about `4 min 7 s`, the three-angle medium validation took
+`19 min 25 s`, and the combined one-angle medium/fine mesh check took
+`35 min 53 s`. These times include geometry construction; the snapshot also
+includes plot sampling. Solve counts are a better planning measure:
 
 | Study | Approximate FEM solves |
 |---|---:|
@@ -283,15 +323,18 @@ plot sampling. Solve counts are a better planning measure:
 | cogging at 72 points | `72` |
 | inductance at 37 positions | `185` (`5 x 37`) |
 | validation at 3 positions, with equal test/delta current | `15` (`5 x 3`) |
+| one-angle `meshcheck` | `10` (`5 x 2` mesh levels) |
 | default raw emap | `192` (`4 x 4 x 12`) |
 
-The checked-in reduced convergence run took about 3 hours and is resumable from
+The checked-in reduced convergence run took about 2 h 49 min and is resumable from
 `.convergence_cache`. A production convergence run can take many hours.
 
 ## Regenerating README Assets
 
-After the FEMM snapshot and acceptance CSVs exist, regenerate every README image
-and its source manifest with:
+After the acceptance CSV/JSON, both convergence CSVs, medium/fine comparison
+JSON, all field images, and snapshot metadata exist, with a
+`resolved_femm_config.json` and `femm_run_manifest.json` in each source output
+directory, regenerate every README image and its source manifest with:
 
 ```powershell
 python .\generate_readme_assets.py `
@@ -301,9 +344,12 @@ python .\generate_readme_assets.py `
 
 The generator uses a non-interactive Matplotlib backend, stable asset names, and
 records source SHA-256 hashes, dimensions, and image hashes in
-[`docs/assets/manifest.json`](docs/assets/manifest.json). Use `--skip-femm` only
-when intentionally generating the quick, winding, acceptance, and convergence
-figures without field images.
+[`docs/assets/manifest.json`](docs/assets/manifest.json). Every successful FEMM
+invocation also appends `femm_run_manifest.json`, binding its analysis arguments,
+physical-model fingerprint, and each file it actually replaced. The asset
+generator verifies these records per file. Use `--skip-femm` only when
+intentionally generating the quick, winding, acceptance, and convergence figures
+without field images.
 
 ## Model Boundaries
 
@@ -339,6 +385,7 @@ motor design/
   tests/                        pure-Python regression tests
   docs/assets/                  current README figures and hash manifest
   output_femm_fix_smoke/        checked-in reduced acceptance/convergence CSVs
+  output_femm_meshcheck/        one-angle medium/fine sensitivity JSON and manifest
   output_readme_femm/           source FEMM snapshot and metadata
 ```
 

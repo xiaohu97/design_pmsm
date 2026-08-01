@@ -1,0 +1,83 @@
+{
+  "metrics": {
+    "cogging_peak_to_peak_nm": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.004396320164365559
+    },
+    "expected_torque_slope_nm_per_a": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.48028452386777176
+    },
+    "ld_lq_saliency_ratio": {
+      "criterion": "<=",
+      "limit": 0.2,
+      "passed": true,
+      "value": 0.024169698323538016
+    },
+    "ld_mean_h": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.0009625181271786203
+    },
+    "load_to_cogging_ratio": {
+      "criterion": ">=",
+      "limit": 5.0,
+      "passed": true,
+      "value": 109.76154767871965
+    },
+    "loaded_torque_mean_nm": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.4825469053319269
+    },
+    "lq_mean_h": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.0009395321366422422
+    },
+    "psi_d0_positive": {
+      "criterion": ">",
+      "limit": 0.0,
+      "passed": true,
+      "value": 0.03201896825785145
+    },
+    "psi_pm_wb": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.03201896825785145
+    },
+    "psi_q0_rms_over_psi_d0": {
+      "criterion": "<=",
+      "limit": 0.05,
+      "passed": true,
+      "value": 0.0017979435417106204
+    },
+    "torque_slope_nm_per_a": {
+      "criterion": "report",
+      "limit": null,
+      "passed": true,
+      "value": 0.4825469053319269
+    },
+    "torque_slope_relative_error": {
+      "criterion": "<=",
+      "limit": 0.2,
+      "passed": true,
+      "value": 0.00471050252865945
+    },
+    "torque_symmetry_error": {
+      "criterion": "<=",
+      "limit": 0.1,
+      "passed": true,
+      "value": 0.0005159024511439242
+    }
+  },
+  "schema_version": 1
+}

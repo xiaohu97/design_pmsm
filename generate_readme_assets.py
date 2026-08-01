@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import sys
@@ -24,7 +25,14 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch, Wedge
 
 import design_pmsm
-from motor_config import MotorConfig, load_motor_config
+from motor_config import (
+    ConfigError,
+    MotorConfig,
+    canonical_config_sha256,
+    load_motor_config,
+    motor_config_from_dict,
+    physical_model_fingerprint,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -74,6 +82,138 @@ def _require_file(path: Path, description: str) -> Path:
     if not path.is_file():
         raise FileNotFoundError(f"Missing {description}: {path}")
     return path
+
+
+def _load_resolved_config(path: Path, description: str) -> tuple[str, str]:
+    _require_file(path, description)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid resolved configuration JSON {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Resolved configuration must be a JSON object: {path}")
+    declared_hash = payload.get("shared_config_sha256")
+    if not isinstance(declared_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", declared_hash):
+        raise ValueError(
+            f"{path} does not contain a valid shared_config_sha256 value."
+        )
+    raw_config = payload.get("shared_config")
+    if not isinstance(raw_config, dict):
+        raise ValueError(f"{path} does not contain a shared_config object.")
+    try:
+        resolved_config = motor_config_from_dict(raw_config)
+    except (ConfigError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid shared_config in {path}: {exc}") from exc
+    computed_hash = canonical_config_sha256(resolved_config)
+    if declared_hash != computed_hash:
+        raise ValueError(
+            f"Resolved configuration hash mismatch in {path}: "
+            f"declared {declared_hash}, computed {computed_hash}."
+        )
+    physical_hash = physical_model_fingerprint(
+        resolved_config.machine,
+        resolved_config.materials,
+        resolved_config.conventions,
+    )
+    declared_physical = payload.get("physical_model_sha256")
+    if declared_physical is not None and declared_physical != physical_hash:
+        raise ValueError(
+            f"Resolved physical-model hash mismatch in {path}: "
+            f"declared {declared_physical}, computed {physical_hash}."
+        )
+    return computed_hash, physical_hash
+
+
+def _require_matching_resolved_config(
+    path: Path,
+    *,
+    expected_physical_hash: str,
+    description: str,
+) -> Path:
+    _, actual_physical_hash = _load_resolved_config(path, description)
+    if actual_physical_hash != expected_physical_hash:
+        raise ValueError(
+            f"{description} was generated from a different FEMM physical model: "
+            f"expected {expected_physical_hash}, found {actual_physical_hash} "
+            f"in {path}."
+        )
+    return path
+
+
+def _manifest_value_matches(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, float):
+        try:
+            return math.isclose(float(actual), expected, rel_tol=0.0, abs_tol=1e-12)
+        except (TypeError, ValueError):
+            return False
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(
+            _manifest_value_matches(actual_item, expected_item)
+            for actual_item, expected_item in zip(actual, expected)
+        )
+    return actual == expected
+
+
+def _require_provenanced_file(
+    path: Path,
+    expected_physical_hash: str,
+    *,
+    required_analyses: Iterable[str] = (),
+    expected_arguments: dict[str, Any] | None = None,
+) -> Path:
+    """Require an exact file hash in a successful FEMM run manifest."""
+    _require_file(path, "FEMM result")
+    manifest_path = path.parent / "femm_run_manifest.json"
+    _require_file(manifest_path, f"run manifest for {path.name}")
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid FEMM run manifest {manifest_path}: {exc}") from exc
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        raise ValueError(f"Unsupported FEMM run manifest: {manifest_path}")
+    runs = payload.get("runs")
+    if not isinstance(runs, list):
+        raise ValueError(f"Invalid run list in FEMM manifest: {manifest_path}")
+
+    expected_file_hash = _sha256(path)
+    relative = path.relative_to(path.parent).as_posix()
+    required_analysis_set = set(required_analyses)
+    expected_arguments = {} if expected_arguments is None else expected_arguments
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        if run.get("physical_model_sha256") != expected_physical_hash:
+            continue
+        analyses = run.get("analyses")
+        if not isinstance(analyses, list) or not required_analysis_set <= set(analyses):
+            continue
+        arguments = run.get("arguments")
+        if not isinstance(arguments, dict) or any(
+            not _manifest_value_matches(arguments.get(name), expected)
+            for name, expected in expected_arguments.items()
+        ):
+            continue
+        declared_out = arguments.get("out")
+        if not isinstance(declared_out, str):
+            continue
+        declared_out_path = Path(declared_out)
+        if not declared_out_path.is_absolute():
+            declared_out_path = REPO_ROOT / declared_out_path
+        if declared_out_path.resolve() != path.parent.resolve():
+            continue
+        files = run.get("files")
+        if not isinstance(files, list):
+            continue
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            if item.get("path") == relative and item.get("sha256") == expected_file_hash:
+                return manifest_path
+    raise ValueError(
+        f"No successful FEMM run in {manifest_path} binds {path.name} "
+        f"(sha256 {expected_file_hash}) to physical model {expected_physical_hash} "
+        f"and the required analysis contract."
+    )
 
 
 def _read_csv_rows(path: Path, required: Iterable[str]) -> list[dict[str, str]]:
@@ -198,7 +338,7 @@ def generate_winding_layout(
     ax.set_aspect("equal")
     ax.set_axis_off()
 
-    # Stator, rotor, and shaft establish the actual radial proportions.
+    # Stator steel, rotor steel, and nonmagnetic bore establish the radial proportions.
     ax.add_patch(
         Wedge(
             (0.0, 0.0),
@@ -305,11 +445,18 @@ def generate_winding_layout(
         Patch(facecolor=MAGNET_COLORS[polarity], label=f"Magnet {polarity}")
         for polarity in ("N", "S")
     )
+    legend.extend(
+        (
+            Patch(facecolor="#D9D9D9", edgecolor="#555555", label="Stator steel"),
+            Patch(facecolor="#A7A7A7", edgecolor="#4A4A4A", label="Rotor steel"),
+            Patch(facecolor="white", edgecolor="#4A4A4A", label="Nonmagnetic bore"),
+        )
+    )
     ax.legend(
         handles=legend,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.025),
-        ncol=5,
+        bbox_to_anchor=(0.5, -0.04),
+        ncol=4,
         frameon=False,
     )
     return _save_figure(fig, destination, dpi)
@@ -667,6 +814,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--convergence-csv", type=Path)
     parser.add_argument("--integral-csv", type=Path)
     parser.add_argument(
+        "--mesh-check-json",
+        type=Path,
+        default=(
+            REPO_ROOT
+            / "output_femm_meshcheck"
+            / "electromagnetic_mesh_comparison_medium_vs_fine.json"
+        ),
+        help="Medium/fine global-mesh comparison used by the README.",
+    )
+    parser.add_argument(
         "--femm-image-dir",
         type=Path,
         default=DEFAULT_FEMM_IMAGE_DIR,
@@ -714,6 +871,7 @@ def generate_assets(args: argparse.Namespace) -> Path:
         acceptance_dir,
         "torque_integral_convergence.csv",
     )
+    mesh_check_json = args.mesh_check_json
 
     warnings: list[str] = []
     if args.acceptance_metrics is not None:
@@ -734,12 +892,112 @@ def generate_assets(args: argparse.Namespace) -> Path:
         (metrics_path, "acceptance metrics"),
         (convergence_csv, "torque convergence summary"),
         (integral_csv, "torque integral convergence"),
+        (mesh_check_json, "medium/fine global-mesh comparison"),
     ):
         _require_file(path, label)
 
     asset_dir = args.out_dir
     asset_dir.mkdir(parents=True, exist_ok=True)
     config = load_motor_config(config_path)
+    expected_physical_hash = physical_model_fingerprint(
+        config.machine,
+        config.materials,
+        config.conventions,
+    )
+    validation_contract = {
+        "mesh_level": "medium",
+        "validation_iq": 1.0,
+        "validation_delta_current": 1.0,
+        "validation_steps": 3,
+    }
+    convergence_contract = {
+        "convergence_iq": 5.0,
+        "convergence_mesh_points": 3,
+        "convergence_angle_points": ["3,6"],
+    }
+    mesh_check_contract = {
+        "mesh_check_reference_level": "medium",
+        "mesh_check_level": "fine",
+        "validation_iq": 1.0,
+        "validation_delta_current": 1.0,
+    }
+    result_specs = (
+        (validation_csv, {"validate"}, validation_contract),
+        (metrics_path, {"validate"}, validation_contract),
+        (convergence_csv, {"convergence"}, convergence_contract),
+        (integral_csv, {"convergence"}, convergence_contract),
+        (mesh_check_json, {"meshcheck"}, mesh_check_contract),
+    )
+    resolved_inputs: set[Path] = set()
+    run_manifests: set[Path] = set()
+    for result_path, required_analyses, expected_arguments in result_specs:
+        resolved_path = result_path.parent / "resolved_femm_config.json"
+        resolved_inputs.add(
+            _require_matching_resolved_config(
+                resolved_path,
+                expected_physical_hash=expected_physical_hash,
+                description=f"resolved configuration for {result_path.name}",
+            )
+        )
+        run_manifests.add(
+            _require_provenanced_file(
+                result_path,
+                expected_physical_hash,
+                required_analyses=required_analyses,
+                expected_arguments=expected_arguments,
+            )
+        )
+
+    image_resolved: Path | None = None
+    selected_femm_inputs: list[Path] = []
+    snapshot_metadata: Path | None = None
+    if not args.skip_femm:
+        selected_femm_inputs = [
+            _select_femm_image(
+                args.femm_image_dir,
+                prefix,
+                pattern,
+                args.femm_case_tag,
+            )
+            for prefix, pattern, _ in FEMM_IMAGE_SPECS
+        ]
+        if args.femm_case_tag:
+            snapshot_metadata = _require_file(
+                args.femm_image_dir
+                / f"field_snapshot_{args.femm_case_tag}.csv",
+                "FEMM snapshot metadata",
+            )
+            selected_femm_inputs.append(snapshot_metadata)
+        image_resolved = _require_matching_resolved_config(
+            args.femm_image_dir / "resolved_femm_config.json",
+            expected_physical_hash=expected_physical_hash,
+            description="FEMM field-snapshot resolved configuration",
+        )
+        snapshot_contract = {
+            "mesh_level": "medium",
+            "rpm_list": ["600"],
+            "iq_list": ["5"],
+            "snapshot_angle_deg": 0.0,
+            "field_radial_points": 24,
+            "field_angular_points": 120,
+            "airgap_points": 360,
+        }
+        for index, result_path in enumerate(selected_femm_inputs):
+            required_analyses = (
+                {"field"}
+                if index < 2
+                else {"airgap"}
+                if index == 2
+                else {"field", "airgap"}
+            )
+            run_manifests.add(
+                _require_provenanced_file(
+                    result_path,
+                    expected_physical_hash,
+                    required_analyses=required_analyses,
+                    expected_arguments=snapshot_contract,
+                )
+            )
     _configure_plot_style()
 
     assets: list[dict[str, Any]] = []
@@ -794,7 +1052,6 @@ def generate_assets(args: argparse.Namespace) -> Path:
     )
 
     femm_sources: list[Path] = []
-    snapshot_metadata: Path | None = None
     if args.skip_femm:
         for _, _, stable_name in FEMM_IMAGE_SPECS:
             stale_snapshot = asset_dir / stable_name
@@ -815,13 +1072,6 @@ def generate_assets(args: argparse.Namespace) -> Path:
                     sources=(source,),
                 )
             )
-        if args.femm_case_tag:
-            snapshot_metadata = _require_file(
-                args.femm_image_dir
-                / f"field_snapshot_{args.femm_case_tag}.csv",
-                "FEMM snapshot metadata",
-            )
-
     source_roles = {
         config_path: "shared motor configuration",
         REPO_ROOT / "motor_config.py": "configuration schema",
@@ -831,8 +1081,15 @@ def generate_assets(args: argparse.Namespace) -> Path:
         metrics_path: "electromagnetic acceptance metrics",
         convergence_csv: "torque convergence summary",
         integral_csv: "torque integral convergence",
+        mesh_check_json: "medium/fine global-mesh sensitivity comparison",
         Path(__file__).resolve(): "asset generator",
     }
+    for resolved_path in resolved_inputs:
+        source_roles[resolved_path] = "FEMM result resolved configuration"
+    for manifest_path in run_manifests:
+        source_roles[manifest_path] = "per-file FEMM run provenance"
+    if image_resolved is not None:
+        source_roles[image_resolved] = "field-snapshot resolved configuration"
     source_roles.update({source: "FEMM rendered snapshot" for source in femm_sources})
     if snapshot_metadata is not None:
         source_roles[snapshot_metadata] = "FEMM snapshot operating point"

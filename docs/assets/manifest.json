@@ -1,61 +1,61 @@
 {
   "assets": [
     {
-      "bytes": 244449,
+      "bytes": 236941,
       "height_px": 1460,
       "kind": "generated:femm-acceptance",
       "name": "electromagnetic_acceptance.png",
       "path": "docs/assets/electromagnetic_acceptance.png",
-      "sha256": "cb18782807de987b0644c8446452b3b03d0dfb1afe86d34dff04832555078b80",
+      "sha256": "080bacdf2243e452b257ca987f1d4f98cee994e11971b3064f1f6f1d44d97276",
       "sources": [
         "output_femm_fix_smoke/electromagnetic_validation_samples.csv",
-        "output_femm_fix_smoke/electromagnetic_acceptance.csv"
+        "output_femm_fix_smoke/electromagnetic_acceptance_metrics.json"
       ],
       "width_px": 2090
     },
     {
-      "bytes": 132999,
+      "bytes": 132897,
       "height_px": 600,
       "kind": "copied:femm-snapshot",
       "name": "femm_airgap_flux_density.png",
       "path": "docs/assets/femm_airgap_flux_density.png",
-      "sha256": "c024ce6a10c0c047f6d3bae3cf4fb233a935be77dd0c7362fc2fffd83e7ae783",
+      "sha256": "2dafb4ec60a84eec7e056b46d3b58802347f00423a16d918a73456ff738015a7",
       "sources": [
         "output_readme_femm/airgap_B_rpm600_iq5_a0.png"
       ],
       "width_px": 1500
     },
     {
-      "bytes": 176280,
+      "bytes": 212796,
       "height_px": 953,
       "kind": "copied:femm-snapshot",
       "name": "femm_field_density.png",
       "path": "docs/assets/femm_field_density.png",
-      "sha256": "a6b41fc0b6f173619cda48ab5e06abff295bc86b88dfe9a0d3f52e917595d264",
+      "sha256": "443dda96b68898b59e9b98ed9f05bd36e6394eb0f4bdb27dc3fcf5944e24f5fa",
       "sources": [
         "output_readme_femm/field_density_rpm600_iq5_a0.png"
       ],
-      "width_px": 998
+      "width_px": 1011
     },
     {
-      "bytes": 398681,
+      "bytes": 561489,
       "height_px": 1070,
       "kind": "copied:femm-snapshot",
       "name": "femm_flux_lines.png",
       "path": "docs/assets/femm_flux_lines.png",
-      "sha256": "89a671464f7e18cc138e40feb746b69a99d69c3f91053ff9163b8b0b1a7bd0f4",
+      "sha256": "a6aeb22e63b25106357e407f1d3239faaf644968b3cb72b6c796fabf00b9f4db",
       "sources": [
         "output_readme_femm/field_lines_rpm600_iq5_a0.png"
       ],
       "width_px": 1049
     },
     {
-      "bytes": 195484,
+      "bytes": 195900,
       "height_px": 1200,
       "kind": "generated:quick-model",
       "name": "quick_sweep.png",
       "path": "docs/assets/quick_sweep.png",
-      "sha256": "e06b97d3a50e71973e7c1b5e15d086b6c756443a887fa21b61b8800cfa90c3ed",
+      "sha256": "f3ae8d1d51b17db6cb0b24059d7f254e3fbe6c28ca0ee6e81d3fcab67a83d820",
       "sources": [
         "motor_config.json",
         "design_pmsm.py"
@@ -63,12 +63,12 @@
       "width_px": 1650
     },
     {
-      "bytes": 247731,
+      "bytes": 237058,
       "height_px": 1460,
       "kind": "generated:femm-convergence",
       "name": "torque_convergence.png",
       "path": "docs/assets/torque_convergence.png",
-      "sha256": "cb223115f69acc81b04f8f9334a01c6f42919b88e4d43a1c533801864473938c",
+      "sha256": "0d8417cf62b1ec18ed9911114d700cf46b18cd669056dca5097667b9e42f21d6",
       "sources": [
         "output_femm_fix_smoke/torque_convergence_summary.csv",
         "output_femm_fix_smoke/torque_integral_convergence.csv"
@@ -76,17 +76,17 @@
       "width_px": 2090
     },
     {
-      "bytes": 224359,
+      "bytes": 272889,
       "height_px": 1496,
       "kind": "generated:femm-winding-layout",
       "name": "winding_18s20p.png",
       "path": "docs/assets/winding_18s20p.png",
-      "sha256": "2fab8603602d7fa0c47b790da60530fba6f1dcf8c272ac82ef5715513ba8f64a",
+      "sha256": "5b59b95d9740cc7d66a826f109be54c07525505dc7f6383975fb19704d5a4f3b",
       "sources": [
         "motor_config.json",
         "femm_spm_template.py"
       ],
-      "width_px": 1388
+      "width_px": 1368
     }
   ],
   "backend": "Agg",
@@ -107,79 +107,119 @@
       "sha256": "97581d40ba4fa6dc70c64a7b3f269354424f280f5508ce939463f5a01b785d1f"
     },
     {
-      "bytes": 98131,
+      "bytes": 109848,
       "path": "femm_spm_template.py",
       "role": "FEMM geometry and winding definition",
-      "sha256": "5fe34c5f4739267ead29c5539d7d52211dfe681ba125dd49eb8b62304fc0644b"
+      "sha256": "75c768e741988ae250febec3c593d8cc6237ef8051c04e4ecba2fdf67792a469"
     },
     {
-      "bytes": 28934,
+      "bytes": 39057,
       "path": "generate_readme_assets.py",
       "role": "asset generator",
-      "sha256": "6aecce3e09dd087c8f8b2e4fa99cb495323583019ade7dd9a731a000964e50e1"
+      "sha256": "94bbc5aa026050a260a049314903a37c08e6f9a964c57194f55d6c8b858ca4ef"
     },
     {
-      "bytes": 2298,
+      "bytes": 2334,
       "path": "motor_config.json",
       "role": "shared motor configuration",
-      "sha256": "705091aa83cdc3fedc93587aa302b200054aaa3d759df05ed161b9e0635eec95"
+      "sha256": "ce493e6998d0b5f31182e12812533d25b78c4a41424adfc9761e454222807078"
     },
     {
-      "bytes": 19806,
+      "bytes": 19915,
       "path": "motor_config.py",
       "role": "configuration schema",
-      "sha256": "25f70452055f912bb4a360981fa2c72088b2865af53d2d16dd692040e7336a55"
+      "sha256": "9805e09099c88cc39f745cc0cc02ec533efeb1fa7344e103b0c57926d327ce7d"
     },
     {
-      "bytes": 762,
-      "path": "output_femm_fix_smoke/electromagnetic_acceptance.csv",
+      "bytes": 1965,
+      "path": "output_femm_fix_smoke/electromagnetic_acceptance_metrics.json",
       "role": "electromagnetic acceptance metrics",
-      "sha256": "15749efb501ce59c936575bf4980b674bf8914c6f796fb561a4aab26429bd570"
+      "sha256": "627b761a10544af1c2c70a3754e5787038633b42aef2fdc3df25151d6ae0969d"
     },
     {
-      "bytes": 793,
+      "bytes": 795,
       "path": "output_femm_fix_smoke/electromagnetic_validation_samples.csv",
       "role": "electromagnetic validation samples",
-      "sha256": "512468f50ce5a7e2ee9653baeb4c7efac050529c71d0518f051f4284ff83d7e7"
+      "sha256": "8f38e7c1469cc7b9f4667062e6b1d1ba3bada2fd5e7be96b76365f78f828d12b"
     },
     {
-      "bytes": 945,
+      "bytes": 6722,
+      "path": "output_femm_fix_smoke/femm_run_manifest.json",
+      "role": "per-file FEMM run provenance",
+      "sha256": "01cf5f916eeb7c3953f54fa00be478ba42630b1783ce7d62327b515c12fa599e"
+    },
+    {
+      "bytes": 3973,
+      "path": "output_femm_fix_smoke/resolved_femm_config.json",
+      "role": "FEMM result resolved configuration",
+      "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79"
+    },
+    {
+      "bytes": 948,
       "path": "output_femm_fix_smoke/torque_convergence_summary.csv",
       "role": "torque convergence summary",
-      "sha256": "32c98afc9df16b54d1f7c6d6dbbb139ae3836942a165f206b64a7e1df6321328"
+      "sha256": "649f7dbe0a237c426e683fe09ffb79198546295e798abd30f4d95160853e33f7"
     },
     {
-      "bytes": 1022,
+      "bytes": 1014,
       "path": "output_femm_fix_smoke/torque_integral_convergence.csv",
       "role": "torque integral convergence",
-      "sha256": "8f3e0cd8c0cb389cde7ea91149ba54ca20095acabd43b1b2f1f0f3b93f253f33"
+      "sha256": "06dbe639ce2e56cdd01139a5a2f51eea062ad219dd1c8cad9066c8463f46742e"
     },
     {
-      "bytes": 132999,
+      "bytes": 1015,
+      "path": "output_femm_meshcheck/electromagnetic_mesh_comparison_medium_vs_fine.json",
+      "role": "medium/fine global-mesh sensitivity comparison",
+      "sha256": "6185064e5eb9e62bd86bd5ee4f8ffba38532edeedb7f31d7823e1832f7cc3fa5"
+    },
+    {
+      "bytes": 5135,
+      "path": "output_femm_meshcheck/femm_run_manifest.json",
+      "role": "per-file FEMM run provenance",
+      "sha256": "d182ca4d655a552c6ca42632d69a2a7d57b7e3577afbeb002fb73772e5aa8f1f"
+    },
+    {
+      "bytes": 3973,
+      "path": "output_femm_meshcheck/resolved_femm_config.json",
+      "role": "FEMM result resolved configuration",
+      "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79"
+    },
+    {
+      "bytes": 132897,
       "path": "output_readme_femm/airgap_B_rpm600_iq5_a0.png",
       "role": "FEMM rendered snapshot",
-      "sha256": "c024ce6a10c0c047f6d3bae3cf4fb233a935be77dd0c7362fc2fffd83e7ae783"
+      "sha256": "2dafb4ec60a84eec7e056b46d3b58802347f00423a16d918a73456ff738015a7"
     },
     {
-      "bytes": 176280,
+      "bytes": 3252,
+      "path": "output_readme_femm/femm_run_manifest.json",
+      "role": "per-file FEMM run provenance",
+      "sha256": "dbf71128afe0232751f227995c7e5fff59d1309f5e645abe4afa0265adf134b5"
+    },
+    {
+      "bytes": 212796,
       "path": "output_readme_femm/field_density_rpm600_iq5_a0.png",
       "role": "FEMM rendered snapshot",
-      "sha256": "a6b41fc0b6f173619cda48ab5e06abff295bc86b88dfe9a0d3f52e917595d264"
+      "sha256": "443dda96b68898b59e9b98ed9f05bd36e6394eb0f4bdb27dc3fcf5944e24f5fa"
     },
     {
-      "bytes": 398681,
+      "bytes": 561489,
       "path": "output_readme_femm/field_lines_rpm600_iq5_a0.png",
       "role": "FEMM rendered snapshot",
-      "sha256": "89a671464f7e18cc138e40feb746b69a99d69c3f91053ff9163b8b0b1a7bd0f4"
+      "sha256": "a6aeb22e63b25106357e407f1d3239faaf644968b3cb72b6c796fabf00b9f4db"
     },
     {
-      "bytes": 167,
+      "bytes": 168,
       "path": "output_readme_femm/field_snapshot_rpm600_iq5_a0.csv",
       "role": "FEMM snapshot operating point",
-      "sha256": "578110135be07b8f86fb1632cba6099606a2c155d534765df9c144d1d92a1cd5"
+      "sha256": "67e54a8e4abb2a8bcd74ec1fc537693c5c114e99e98960c631724ff9c627534f"
+    },
+    {
+      "bytes": 3973,
+      "path": "output_readme_femm/resolved_femm_config.json",
+      "role": "field-snapshot resolved configuration",
+      "sha256": "8ede613d16fb217f77c4e913e2a8c7297659792d1da7a6c509317ce3d985cf79"
     }
   ],
-  "warnings": [
-    "electromagnetic_acceptance_metrics.json was absent; used legacy electromagnetic_acceptance.csv."
-  ]
+  "warnings": []
 }

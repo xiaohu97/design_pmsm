@@ -1,0 +1,20 @@
+{
+  "cogging_torque_nm": 0.002107350081924966,
+  "delta_current_peak_a": 1.0,
+  "expected_torque_slope_nm_per_a": 0.4802708775155256,
+  "iq_test_peak_a": 1.0,
+  "ld_h": 0.0009623028483172896,
+  "ld_lq_saliency_ratio": 0.024037139977213372,
+  "loaded_torque_neg_nm": -0.48265907148672565,
+  "loaded_torque_pos_nm": 0.48240832275334883,
+  "lq_h": 0.0009394465401907162,
+  "mesh_level": "medium",
+  "psi_d0_wb": 0.03201805850103504,
+  "psi_q0_abs_over_psi_d0": 0.0017664297626236707,
+  "psi_q0_wb": 5.655765147765413e-05,
+  "rotor_angle_deg": 0.0,
+  "theta_e_deg": -100.00000000000009,
+  "torque_slope_nm_per_a": 0.48253369712003724,
+  "torque_slope_relative_error": 0.004711548649831437,
+  "torque_symmetry_error": 0.000519650202407417
+}
